@@ -139,10 +139,8 @@
   // Export Daily Reports Excel / CSV (Exact layout matching POS Daily Report)
   async function exportReportsExcelCsv() {
     const days = document.getElementById('periodSelect').value;
-    const nowStr = new Date().toLocaleString('en-PH', {
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: false
-    });
+    const now = new Date();
+    const dateStr = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     // Fetch stats for breakdown
     let stats = { ordersToday: 0, revenueToday: 0, topItems: [], paymentBreakdown: [] };
@@ -154,58 +152,58 @@
     const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue || 0), 0) / 100;
 
     const lines = [
-      '"" , "Kanlungan Coffee Garage POS - Daily Report"',
-      '"" , "Clean export layout - Black & White only"',
-      '""',
-      '"REPORT DETAILS"',
-      '"Report Field","Value"',
-      `"Report Date Range","Last ${days} Days"`,
-      `"Generated At","${nowStr}"`,
-      '""',
-      '"SUMMARY METRICS"',
-      '"Metric","Value"',
-      `"Total Orders",${totalOrders}`,
-      `"Gross Sales",${totalRevenue.toFixed(2)}`,
-      `"Net Sales",${totalRevenue.toFixed(2)}`,
-      '""',
-      '"PAYMENT BREAKDOWN"',
-      '"Payment Method","Total Amount"'
+      `,Kanlungan Coffee Garage POS - Daily Report`,
+      `,Clean export layout - Black & White only`,
+      ``,
+      `REPORT DETAILS`,
+      `Report Field,Value`,
+      `Report Date Range,Last ${days} Days`,
+      `Generated At,${dateStr}`,
+      ``,
+      `SUMMARY METRICS`,
+      `Metric,Value`,
+      `Total Orders,${totalOrders}`,
+      `Gross Sales,${totalRevenue.toFixed(2)}`,
+      `Net Sales,${totalRevenue.toFixed(2)}`,
+      ``,
+      `PAYMENT BREAKDOWN`,
+      `Payment Method,Total Amount`
     ];
 
     if (stats.paymentBreakdown && stats.paymentBreakdown.length > 0) {
       stats.paymentBreakdown.forEach(p => {
-        lines.push(`"${p.method}",${(p.total / 100).toFixed(2)}`);
+        lines.push(`${p.method},${(p.total / 100).toFixed(2)}`);
       });
     } else {
-      lines.push('"No transactions",0.00');
+      lines.push(`No transactions,0.00`);
     }
 
-    lines.push('""');
-    lines.push('"TOP SELLING ITEMS"');
-    lines.push('"Item Name","Quantity Sold","Revenue"');
+    lines.push(``);
+    lines.push(`TOP SELLING ITEMS`);
+    lines.push(`Item Name,Quantity Sold,Revenue`);
 
     if (stats.topItems && stats.topItems.length > 0) {
       stats.topItems.forEach(item => {
-        lines.push(`"${item.name.replace(/"/g, '""')}",${parseFloat(item.qty).toFixed(2)},0.00`);
+        lines.push(`${item.name},${parseFloat(item.qty).toFixed(2)},0.00`);
       });
     } else {
-      lines.push('"No items sold",0.00,0.00');
+      lines.push(`No items sold,0.00,0.00`);
     }
 
-    lines.push('""');
-    lines.push('"CASH DRAWER SUMMARY"');
-    lines.push('"Metric","Value"');
-    lines.push('"Starting Cash",0.00');
-    lines.push('"Expected Cash Ending",0.00');
-    lines.push('"Online Payments",0.00');
-    lines.push('"Total Cash + Online Payment",0.00');
-    lines.push('"Actual Cash Ending",0.00');
-    lines.push('"Difference",0.00');
-    lines.push('"Cash Sales",0.00');
-    lines.push('"Cash Added",0.00');
-    lines.push('"Cash Removed",0.00');
-    lines.push('""');
-    lines.push('"" , "End of Daily Report"');
+    lines.push(``);
+    lines.push(`CASH DRAWER SUMMARY`);
+    lines.push(`Metric,Value`);
+    lines.push(`Starting Cash,0.00`);
+    lines.push(`Expected Cash Ending,0.00`);
+    lines.push(`Online Payments,0.00`);
+    lines.push(`Total Cash + Online Payment,0.00`);
+    lines.push(`Actual Cash Ending,0.00`);
+    lines.push(`Difference,0.00`);
+    lines.push(`Cash Sales,0.00`);
+    lines.push(`Cash Added,0.00`);
+    lines.push(`Cash Removed,0.00`);
+    lines.push(``);
+    lines.push(`End of Daily Report`);
 
     const csvContent = '\uFEFF' + lines.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
