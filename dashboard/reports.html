@@ -136,37 +136,83 @@
     });
   }
 
-  // Export Daily Reports Excel / CSV
-  function exportReportsExcelCsv() {
-    if (!reportData || !reportData.length) return alert('No report data to export');
+  // Export Daily Reports Excel / CSV (Exact layout matching POS Daily Report)
+  async function exportReportsExcelCsv() {
     const days = document.getElementById('periodSelect').value;
-    const now = new Date().toLocaleString('en-PH');
+    const nowStr = new Date().toLocaleString('en-PH', {
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
 
-    const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue||0), 0);
-    const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders||0), 0);
-    const avgDay = reportData.length ? Math.round(totalRevenue / reportData.length) : 0;
+    // Fetch stats for breakdown
+    let stats = { ordersToday: 0, revenueToday: 0, topItems: [], paymentBreakdown: [] };
+    try {
+      stats = (await api.getStats()) || stats;
+    } catch (e) {}
+
+    const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders || 0), 0);
+    const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue || 0), 0) / 100;
 
     const lines = [
-      '"KANLUNGAN COFFEE GARAGE - DAILY SALES REPORT"',
-      `"Generated On:","${now}"`,
-      `"Period:","Last ${days} Days"`,
+      '"" , "Kanlungan Coffee Garage POS - Daily Report"',
+      '"" , "Clean export layout - Black & White only"',
       '""',
-      '"SUMMARY"',
-      `"Total Revenue","PHP ${(totalRevenue/100).toFixed(2)}"`,
-      `"Total Orders","${totalOrders}"`,
-      `"Average Daily Revenue","PHP ${(avgDay/100).toFixed(2)}"`,
+      '"REPORT DETAILS"',
+      '"Report Field","Value"',
+      `"Report Date Range","Last ${days} Days"`,
+      `"Generated At","${nowStr}"`,
       '""',
-      '"DAILY SALES BREAKDOWN"',
-      '"Date","Total Orders","Revenue (PHP)"',
-      ...reportData.map(d => `"${d.date}","${d.orders}","${(parseInt(d.revenue||0)/100).toFixed(2)}"`)
+      '"SUMMARY METRICS"',
+      '"Metric","Value"',
+      `"Total Orders",${totalOrders}`,
+      `"Gross Sales",${totalRevenue.toFixed(2)}`,
+      `"Net Sales",${totalRevenue.toFixed(2)}`,
+      '""',
+      '"PAYMENT BREAKDOWN"',
+      '"Payment Method","Total Amount"'
     ];
+
+    if (stats.paymentBreakdown && stats.paymentBreakdown.length > 0) {
+      stats.paymentBreakdown.forEach(p => {
+        lines.push(`"${p.method}",${(p.total / 100).toFixed(2)}`);
+      });
+    } else {
+      lines.push('"No transactions",0.00');
+    }
+
+    lines.push('""');
+    lines.push('"TOP SELLING ITEMS"');
+    lines.push('"Item Name","Quantity Sold","Revenue"');
+
+    if (stats.topItems && stats.topItems.length > 0) {
+      stats.topItems.forEach(item => {
+        lines.push(`"${item.name.replace(/"/g, '""')}",${parseFloat(item.qty).toFixed(2)},0.00`);
+      });
+    } else {
+      lines.push('"No items sold",0.00,0.00');
+    }
+
+    lines.push('""');
+    lines.push('"CASH DRAWER SUMMARY"');
+    lines.push('"Metric","Value"');
+    lines.push('"Starting Cash",0.00');
+    lines.push('"Expected Cash Ending",0.00');
+    lines.push('"Online Payments",0.00');
+    lines.push('"Total Cash + Online Payment",0.00');
+    lines.push('"Actual Cash Ending",0.00');
+    lines.push('"Difference",0.00');
+    lines.push('"Cash Sales",0.00');
+    lines.push('"Cash Added",0.00');
+    lines.push('"Cash Removed",0.00');
+    lines.push('""');
+    lines.push('"" , "End of Daily Report"');
 
     const csvContent = '\uFEFF' + lines.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `kanlungan_daily_report_${days}days_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute('download', `Kanlungan_Daily_Report_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
