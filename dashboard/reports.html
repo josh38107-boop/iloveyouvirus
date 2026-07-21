@@ -41,6 +41,9 @@
           <option value="14">Last 14 days</option>
           <option value="30">Last 30 days</option>
         </select>
+        <button class="btn" style="background:#1a1a1a;color:#ffffff;border-radius:99px;padding:8px 18px;font-weight:600;" onclick="exportReportsExcelCsv()">
+          📊 Export Excel/CSV
+        </button>
         <span class="topbar-time" id="topbarTime"></span>
         <button class="btn-logout" onclick="logout()">Sign Out</button>
       </div>
@@ -81,18 +84,18 @@
 <script src="js/api.js"></script>
 <script>
   requireAuth(); startClock();
-  let revenueChartInst, ordersChartInst;
+  let revenueChartInst, ordersChartInst, reportData = [];
 
   async function loadReports() {
     const days = parseInt(document.getElementById('periodSelect').value);
     document.getElementById('chartSubtitle').textContent = `Last ${days} days`;
-    const data = await api.getSales(days);
-    if (!data) return;
+    reportData = await api.getSales(days);
+    if (!reportData) return;
 
-    const totalRevenue = data.reduce((s, d) => s + parseInt(d.revenue||0), 0);
-    const totalOrders = data.reduce((s, d) => s + parseInt(d.orders||0), 0);
-    const avgDay = data.length ? Math.round(totalRevenue / data.length) : 0;
-    const bestDay = data.reduce((m, d) => Math.max(m, parseInt(d.revenue||0)), 0);
+    const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue||0), 0);
+    const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders||0), 0);
+    const avgDay = reportData.length ? Math.round(totalRevenue / reportData.length) : 0;
+    const bestDay = reportData.reduce((m, d) => Math.max(m, parseInt(d.revenue||0)), 0);
 
     document.getElementById('rRevenue').textContent = formatPeso(totalRevenue);
     document.getElementById('rOrders').textContent = totalOrders.toLocaleString();
@@ -106,8 +109,8 @@
     grad.addColorStop(0,'rgba(245,166,35,0.35)'); grad.addColorStop(1,'rgba(245,166,35,0)');
     revenueChartInst = new Chart(ctx1, {
       type:'line',
-      data: { labels: data.map(d=>d.date), datasets:[{
-        label:'Revenue', data: data.map(d=>(parseInt(d.revenue||0)/100).toFixed(2)),
+      data: { labels: reportData.map(d=>d.date), datasets:[{
+        label:'Revenue', data: reportData.map(d=>(parseInt(d.revenue||0)/100).toFixed(2)),
         borderColor:'#f5a623', backgroundColor:grad, borderWidth:2.5, tension:0.4, fill:true,
         pointBackgroundColor:'#f5a623', pointRadius:4
       }]},
@@ -123,14 +126,50 @@
     const ctx2 = document.getElementById('ordersChart').getContext('2d');
     ordersChartInst = new Chart(ctx2, {
       type:'bar',
-      data: { labels: data.map(d=>d.date), datasets:[{
-        label:'Orders', data: data.map(d=>parseInt(d.orders||0)),
+      data: { labels: reportData.map(d=>d.date), datasets:[{
+        label:'Orders', data: reportData.map(d=>parseInt(d.orders||0)),
         backgroundColor:'rgba(96,165,250,0.7)', borderRadius:6, borderSkipped:false
       }]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
         scales:{x:{grid:{color:'#2a2f3e'},ticks:{color:'#7a8099',font:{size:11}}},
                 y:{grid:{color:'#2a2f3e'},ticks:{color:'#7a8099',font:{size:11}},beginAtZero:true}}}
     });
+  }
+
+  // Export Daily Reports Excel / CSV
+  function exportReportsExcelCsv() {
+    if (!reportData || !reportData.length) return alert('No report data to export');
+    const days = document.getElementById('periodSelect').value;
+    const now = new Date().toLocaleString('en-PH');
+
+    const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue||0), 0);
+    const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders||0), 0);
+    const avgDay = reportData.length ? Math.round(totalRevenue / reportData.length) : 0;
+
+    const lines = [
+      '"KANLUNGAN COFFEE GARAGE - DAILY SALES REPORT"',
+      `"Generated On:","${now}"`,
+      `"Period:","Last ${days} Days"`,
+      '""',
+      '"SUMMARY"',
+      `"Total Revenue","PHP ${(totalRevenue/100).toFixed(2)}"`,
+      `"Total Orders","${totalOrders}"`,
+      `"Average Daily Revenue","PHP ${(avgDay/100).toFixed(2)}"`,
+      '""',
+      '"DAILY SALES BREAKDOWN"',
+      '"Date","Total Orders","Revenue (PHP)"',
+      ...reportData.map(d => `"${d.date}","${d.orders}","${(parseInt(d.revenue||0)/100).toFixed(2)}"`)
+    ];
+
+    const csvContent = '\uFEFF' + lines.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `kanlungan_daily_report_${days}days_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   loadReports();
