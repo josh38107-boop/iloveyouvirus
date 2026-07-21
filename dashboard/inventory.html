@@ -53,12 +53,8 @@
         <div class="card-header">
           <div class="card-title">All Ingredients</div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="file" id="csvFileInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="handleCsvImport(event)"/>
             <button class="btn" style="background:#1a1a1a;color:#ffffff;border-radius:99px;padding:9px 20px;font-weight:600;" onclick="exportExcelCsv()">
               📊 Export Excel/CSV
-            </button>
-            <button class="btn btn-outline" style="border-radius:99px;" onclick="document.getElementById('csvFileInput').click()">
-              📤 Import Excel/CSV
             </button>
             <button class="btn btn-primary" style="border-radius:99px;" onclick="openEditModal()">
               + Add Ingredient
