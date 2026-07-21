@@ -39,6 +39,9 @@ const api = {
   upsertEmployee: (emp) => apiFetch('/rest/v1/employee?on_conflict=id', {
     method: 'POST', body: JSON.stringify(emp)
   }),
+  upsertIngredient: (ing) => apiFetch('/rest/v1/ingredient?on_conflict=id', {
+    method: 'POST', body: JSON.stringify(ing)
+  }),
 };
 
 // Utility: format currency (Philippine Peso)
