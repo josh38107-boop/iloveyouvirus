@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kanlungan Launcher Icon -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background black -->
+    <path
+        android:fillColor="#1A1A1A"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Three-ring vintage garage shield -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M54,5 L92,10 Q98,11 98,17 L98,62 Q98,82 82,92 L54,105 L26,92 Q10,82 10,62 L10,17 Q10,11 16,10 Z" />
+
+    <path
+        android:fillColor="#0B0B0B"
+        android:pathData="M54,11 L88,16 Q92,17 92,21 L92,61 Q92,77 78,86 L54,98 L30,86 Q16,77 16,61 L16,21 Q16,17 20,16 Z" />
+
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E7D48A"
+        android:strokeWidth="2.2"
+        android:pathData="M54,18 L83,22 Q86,23 86,26 L86,60 Q86,73 74,81 L54,91 L34,81 Q22,73 22,60 L22,26 Q22,23 25,22 Z" />
+
+    <!-- Serif K monogram -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M33,29 L52,29 L52,34 L48,34 L48,73 L52,73 L52,78 L33,78 L33,73 L37,73 L37,34 L33,34 Z" />
+
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M46,55 L67,34 L62,34 L62,29 L82,29 L82,34 L76,34 L55,56 Z" />
+
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M50,52 L77,73 L82,73 L82,78 L62,78 L62,73 L67,73 L46,57 Z" />
+
+</vector>

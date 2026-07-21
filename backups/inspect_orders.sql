@@ -1,0 +1,1 @@
+SELECT status, count(1) FROM PosOrder GROUP BY status; SELECT id || '|' || status || '|' || shiftId || '|' || createdAt || '|' || ifnull(paidAt,'') || '|' || totalCents FROM PosOrder ORDER BY createdAt DESC LIMIT 20;

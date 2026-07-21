@@ -1,0 +1,31 @@
+# Ignore heavy Android SDK / build tools / binaries
+tools/
+*.zip
+*.tar.gz
+*.exe
+*.dump
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.env
+
+# Android/Gradle build files
+.gradle/
+build/
+local.properties
+.cxx/
+*.apk
+*.aar
+*.jar
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+.navigation/
+
+# OS specific files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard — Kanlungan Coffee Garage</title>
+  <meta name="description" content="Admin dashboard for Kanlungan Coffee Garage POS system"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text">
+        <h2>Kanlungan<br/>Coffee Garage</h2>
+        <p>Admin Panel</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item active"><span class="nav-icon">📊</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">🧾</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">📈</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
+    </nav>
+    <div class="sidebar-footer">
+      <span>Live</span>
+      <span class="sync-dot"></span>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1>Overview</h1>
+        <div style="font-size:13px;color:var(--text-muted);">Today's summary</div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-time" id="topbarTime"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="content fade-up">
+      <!-- Stats -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <span class="stat-icon">🧾</span>
+          <div class="stat-label">Orders Today</div>
+          <div class="stat-value" id="statOrders">—</div>
+          <div class="stat-sub">Completed transactions</div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">💰</span>
+          <div class="stat-label">Revenue Today</div>
+          <div class="stat-value" id="statRevenue">—</div>
+          <div class="stat-sub">Total sales</div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">📊</span>
+          <div class="stat-label">Avg. Order Value</div>
+          <div class="stat-value" id="statAvg">—</div>
+          <div class="stat-sub">Per transaction</div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">⭐</span>
+          <div class="stat-label">Top Item</div>
+          <div class="stat-value" style="font-size:18px;" id="statTop">—</div>
+          <div class="stat-sub">Most ordered today</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Sales (Last 7 Days)</div>
+              <div class="card-sub">Daily revenue trend</div>
+            </div>
+            <select class="input" id="daysSelect" style="padding:6px 10px;font-size:12px;">
+              <option value="7">7 days</option>
+              <option value="14">14 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </div>
+          <div class="chart-container">
+            <canvas id="salesChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Payment Methods</div>
+              <div class="card-sub">Today's breakdown</div>
+            </div>
+          </div>
+          <div class="chart-container" style="height:200px;">
+            <canvas id="paymentChart"></canvas>
+          </div>
+          <div id="paymentLegend" style="margin-top:16px;"></div>
+        </div>
+      </div>
+
+      <!-- Top items + Recent orders -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🏆 Top Items Today</div>
+          </div>
+          <div id="topItemsList">
+            <div class="loading"><div class="spinner"></div> Loading...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🧾 Recent Orders</div>
+            <a href="orders.html" class="btn btn-outline" style="font-size:12px;padding:6px 12px;">View All</a>
+          </div>
+          <div id="recentOrdersList">
+            <div class="loading"><div class="spinner"></div> Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+  requireAuth();
+  startClock();
+
+  let salesChartInst, paymentChartInst;
+
+  async function loadStats() {
+    const stats = await api.getStats();
+    if (!stats) return;
+
+    const orders = stats.ordersToday || 0;
+    const revenue = stats.revenueToday || 0;
+    const avg = orders > 0 ? Math.round(revenue / orders) : 0;
+    const topItem = stats.topItems?.[0]?.name || '—';
+
+    document.getElementById('statOrders').textContent = orders;
+    document.getElementById('statRevenue').textContent = formatPeso(revenue);
+    document.getElementById('statAvg').textContent = formatPeso(avg);
+    document.getElementById('statTop').textContent = topItem;
+
+    // Top items list
+    const topList = document.getElementById('topItemsList');
+    if (stats.topItems?.length) {
+      const maxQty = stats.topItems[0].qty;
+      topList.innerHTML = stats.topItems.map((item, i) => `
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+            <span style="font-size:14px;">${i+1}. ${item.name}</span>
+            <span style="font-size:13px;color:var(--accent);font-weight:600;">${item.qty} sold</span>
+          </div>
+          <div class="progress"><div class="progress-bar" style="width:${(item.qty/maxQty*100).toFixed(0)}%"></div></div>
+        </div>
+      `).join('');
+    } else {
+      topList.innerHTML = '<div class="empty-state"><span class="icon">📭</span><p>No orders today yet</p></div>';
+    }
+
+    // Payment chart
+    const payments = stats.paymentBreakdown || [];
+    if (paymentChartInst) paymentChartInst.destroy();
+    const ctx2 = document.getElementById('paymentChart').getContext('2d');
+    paymentChartInst = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: payments.map(p => p.method),
+        datasets: [{ data: payments.map(p => p.total / 100), backgroundColor: ['#f5a623','#3ecf8e','#60a5fa','#f472b6'], borderWidth: 0, hoverOffset: 6 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
+    });
+    document.getElementById('paymentLegend').innerHTML = payments.map((p, i) => {
+      const colors = ['#f5a623','#3ecf8e','#60a5fa','#f472b6'];
+      return `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+        <span style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <span style="width:10px;height:10px;background:${colors[i]};border-radius:50%;display:inline-block;"></span>${p.method}
+        </span>
+        <span style="font-size:13px;color:var(--accent);font-weight:600;">${formatPeso(p.total)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadSalesChart(days = 7) {
+    const data = await api.getSales(days);
+    if (!data) return;
+    if (salesChartInst) salesChartInst.destroy();
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+    gradient.addColorStop(0, 'rgba(245,166,35,0.3)');
+    gradient.addColorStop(1, 'rgba(245,166,35,0)');
+    salesChartInst = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.date),
+        datasets: [{
+          label: 'Revenue (₱)',
+          data: data.map(d => (d.revenue / 100).toFixed(2)),
+          borderColor: '#f5a623', backgroundColor: gradient,
+          borderWidth: 2.5, tension: 0.4, fill: true,
+          pointBackgroundColor: '#f5a623', pointRadius: 4, pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => ' ₱' + Number(ctx.raw).toLocaleString('en-PH', {minimumFractionDigits:2}) }
+        }},
+        scales: {
+          x: { grid: { color: '#2a2f3e' }, ticks: { color: '#7a8099', font: { size: 11 } } },
+          y: { grid: { color: '#2a2f3e' }, ticks: { color: '#7a8099', font: { size: 11 },
+            callback: v => '₱' + v.toLocaleString('en-PH') } }
+        }
+      }
+    });
+  }
+
+  async function loadRecentOrders() {
+    const orders = await api.getOrders(5);
+    const el = document.getElementById('recentOrdersList');
+    if (!orders?.length) {
+      el.innerHTML = '<div class="empty-state"><span class="icon">📭</span><p>No orders yet</p></div>';
+      return;
+    }
+    el.innerHTML = `<table class="data-table">
+      <thead><tr><th>Order</th><th>Employee</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody>${orders.map(o => `
+        <tr>
+          <td style="font-size:12px;color:var(--text-muted);">#${o.id.substring(0,8)}<br/>
+              <span style="font-size:11px;">${formatDateShort(o.created_at)}</span></td>
+          <td>${o.employee_name || '—'}</td>
+          <td style="font-weight:600;color:var(--accent);">${formatPeso(o.total_cents)}</td>
+          <td><span class="badge ${o.status==='paid'?'badge-success':o.status==='void'?'badge-danger':'badge-warning'}">${o.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  document.getElementById('daysSelect').addEventListener('change', e => loadSalesChart(e.target.value));
+
+  // Load all
+  Promise.all([loadStats(), loadSalesChart(7), loadRecentOrders()]);
+
+  // Auto-refresh every 60 seconds
+  setInterval(() => { loadStats(); loadRecentOrders(); }, 60000);
+</script>
+</body>
+</html>

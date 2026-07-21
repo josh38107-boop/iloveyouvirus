@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kanlungan Coffee Garage - Shield Logo -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="210dp"
+    android:viewportWidth="200"
+    android:viewportHeight="210">
+
+    <!-- Shield outer border (yellow/gold) -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M100,5 L174,14 Q185,16 185,28 L185,120 Q185,158 156,178 L100,207 L44,178 Q15,158 15,120 L15,28 Q15,16 26,14 Z" />
+
+    <!-- Shield inner black fill -->
+    <path
+        android:fillColor="#0B0B0B"
+        android:pathData="M100,18 L164,26 Q173,28 173,37 L173,118 Q173,149 148,166 L100,192 L52,166 Q27,149 27,118 L27,37 Q27,28 36,26 Z" />
+
+    <!-- Inner gold accent border line -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E7D48A"
+        android:strokeWidth="4"
+        android:pathData="M100,31 L153,38 Q161,39 161,47 L161,116 Q161,141 140,155 L100,178 L60,155 Q39,141 39,116 L39,47 Q39,39 47,38 Z" />
+
+    <!-- Letter K - left vertical bar -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M62,57 L91,57 L91,65 L85,65 L85,145 L91,145 L91,153 L62,153 L62,145 L68,145 L68,65 L62,65 Z" />
+
+    <!-- Letter K - upper diagonal (top-right arm) -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M82,111 L126,65 L116,65 L116,57 L151,57 L151,65 L140,65 L96,114 Z" />
+
+    <!-- Letter K - lower diagonal (bottom-right arm) -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M91,105 L141,145 L151,145 L151,153 L116,153 L116,145 L126,145 L82,114 Z" />
+
+</vector>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reports — Kanlungan Coffee Garage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text">
+        <h2>Kanlungan<br/>Coffee Garage</h2>
+        <p>Admin Panel</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">📊</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">🧾</span> Orders</a>
+      <a href="reports.html" class="nav-item active"><span class="nav-icon">📈</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
+    </nav>
+    <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div><h1>Reports</h1><div style="font-size:13px;color:var(--text-muted);">Sales analytics</div></div>
+      <div class="topbar-right">
+        <select class="input" id="periodSelect" onchange="loadReports()" style="padding:7px 12px;font-size:13px;">
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+        <span class="topbar-time" id="topbarTime"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="content fade-up">
+      <!-- Summary cards -->
+      <div class="stats-grid" id="reportStats">
+        <div class="stat-card"><span class="stat-icon">💰</span><div class="stat-label">Total Revenue</div><div class="stat-value" id="rRevenue">—</div></div>
+        <div class="stat-card"><span class="stat-icon">🧾</span><div class="stat-label">Total Orders</div><div class="stat-value" id="rOrders">—</div></div>
+        <div class="stat-card"><span class="stat-icon">📊</span><div class="stat-label">Avg Per Day</div><div class="stat-value" id="rAvgDay">—</div></div>
+        <div class="stat-card"><span class="stat-icon">🏆</span><div class="stat-label">Best Day Revenue</div><div class="stat-value" id="rBestDay">—</div></div>
+      </div>
+
+      <!-- Revenue chart -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Daily Revenue</div>
+          <div class="card-sub" id="chartSubtitle"></div>
+        </div>
+        <div class="chart-container" style="height:300px;">
+          <canvas id="revenueChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Orders per day chart -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">Orders Per Day</div></div>
+        <div class="chart-container" style="height:220px;">
+          <canvas id="ordersChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+  requireAuth(); startClock();
+  let revenueChartInst, ordersChartInst;
+
+  async function loadReports() {
+    const days = parseInt(document.getElementById('periodSelect').value);
+    document.getElementById('chartSubtitle').textContent = `Last ${days} days`;
+    const data = await api.getSales(days);
+    if (!data) return;
+
+    const totalRevenue = data.reduce((s, d) => s + parseInt(d.revenue||0), 0);
+    const totalOrders = data.reduce((s, d) => s + parseInt(d.orders||0), 0);
+    const avgDay = data.length ? Math.round(totalRevenue / data.length) : 0;
+    const bestDay = data.reduce((m, d) => Math.max(m, parseInt(d.revenue||0)), 0);
+
+    document.getElementById('rRevenue').textContent = formatPeso(totalRevenue);
+    document.getElementById('rOrders').textContent = totalOrders.toLocaleString();
+    document.getElementById('rAvgDay').textContent = formatPeso(avgDay);
+    document.getElementById('rBestDay').textContent = formatPeso(bestDay);
+
+    // Revenue chart
+    if (revenueChartInst) revenueChartInst.destroy();
+    const ctx1 = document.getElementById('revenueChart').getContext('2d');
+    const grad = ctx1.createLinearGradient(0,0,0,300);
+    grad.addColorStop(0,'rgba(245,166,35,0.35)'); grad.addColorStop(1,'rgba(245,166,35,0)');
+    revenueChartInst = new Chart(ctx1, {
+      type:'line',
+      data: { labels: data.map(d=>d.date), datasets:[{
+        label:'Revenue', data: data.map(d=>(parseInt(d.revenue||0)/100).toFixed(2)),
+        borderColor:'#f5a623', backgroundColor:grad, borderWidth:2.5, tension:0.4, fill:true,
+        pointBackgroundColor:'#f5a623', pointRadius:4
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:c=>' ₱'+Number(c.raw).toLocaleString('en-PH',{minimumFractionDigits:2})}}},
+        scales:{x:{grid:{color:'#2a2f3e'},ticks:{color:'#7a8099',font:{size:11}}},
+                y:{grid:{color:'#2a2f3e'},ticks:{color:'#7a8099',font:{size:11},
+                   callback:v=>'₱'+Number(v).toLocaleString('en-PH')}}}}
+    });
+
+    // Orders chart
+    if (ordersChartInst) ordersChartInst.destroy();
+    const ctx2 = document.getElementById('ordersChart').getContext('2d');
+    ordersChartInst = new Chart(ctx2, {
+      type:'bar',
+      data: { labels: data.map(d=>d.date), datasets:[{
+        label:'Orders', data: data.map(d=>parseInt(d.orders||0)),
+        backgroundColor:'rgba(96,165,250,0.7)', borderRadius:6, borderSkipped:false
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{grid:{color:'#2a2f3e'},ticks:{color:'#7a8099',font:{size:11}}},
+                y:{grid:{color:'#2a2f3e'},ticks:{color:'#7a8099',font:{size:11}},beginAtZero:true}}}
+    });
+  }
+
+  loadReports();
+</script>
+</body>
+</html>

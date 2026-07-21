@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Inventory — Kanlungan Coffee Garage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text">
+        <h2>Kanlungan<br/>Coffee Garage</h2>
+        <p>Admin Panel</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">📊</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">🧾</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">📈</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
+      <a href="inventory.html" class="nav-item active"><span class="nav-icon">📦</span> Inventory</a>
+    </nav>
+    <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div><h1>Inventory</h1><div style="font-size:13px;color:var(--text-muted);">Stock levels & ingredients</div></div>
+      <div class="topbar-right">
+        <span class="topbar-time" id="topbarTime"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="content fade-up">
+      <!-- Low stock alert -->
+      <div id="lowStockAlert" style="display:none;" class="card" style="border-color:var(--warning);">
+        <div style="color:var(--warning);font-weight:600;margin-bottom:8px;">⚠️ Low Stock Items</div>
+        <div id="lowStockList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Ingredients</div>
+          <button class="btn btn-outline" onclick="loadInventory()">🔄 Refresh</button>
+        </div>
+        <div id="inventoryTable">
+          <div class="loading"><div class="spinner"></div> Loading inventory...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+  requireAuth(); startClock();
+
+  async function loadInventory() {
+    const el = document.getElementById('inventoryTable');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+    const items = await api.getInventory();
+    if (!items?.length) {
+      el.innerHTML = '<div class="empty-state"><span class="icon">📦</span><p>No ingredients found</p></div>'; return;
+    }
+
+    // Show low stock alert
+    const lowStock = items.filter(i => i.low_stock);
+    if (lowStock.length) {
+      document.getElementById('lowStockAlert').style.display = 'block';
+      document.getElementById('lowStockList').innerHTML = lowStock.map(i =>
+        `<span class="badge badge-warning" style="margin:3px;">${i.name}: ${parseFloat(i.quantity_on_hand).toFixed(2)} ${i.unit}</span>`
+      ).join('');
+    }
+
+    el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table">
+      <thead><tr><th>Ingredient</th><th>Unit</th><th>On Hand</th><th>Low Stock Threshold</th><th>Status</th></tr></thead>
+      <tbody>${items.map(i => {
+        const qty = parseFloat(i.quantity_on_hand || 0);
+        const threshold = parseFloat(i.low_stock_threshold || 0);
+        const pct = threshold > 0 ? Math.min((qty / threshold) * 100, 100) : 100;
+        return `<tr>
+          <td style="font-weight:500;">${i.name}</td>
+          <td style="color:var(--text-muted);">${i.unit}</td>
+          <td style="font-weight:600;color:${i.low_stock?'var(--warning)':'var(--success)'};">${qty.toFixed(2)}</td>
+          <td>${threshold.toFixed(2)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div class="progress" style="width:100px;"><div class="progress-bar" style="width:${pct}%;background:${i.low_stock?'var(--warning)':'var(--success)'};"></div></div>
+              <span class="badge ${i.low_stock?'badge-warning':'badge-success'}">${i.low_stock?'Low':'OK'}</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+  }
+
+  loadInventory();
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kanlungan Coffee Garage — Admin Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background: #f5f4f0; }
+    .login-card {
+      background: #ffffff;
+      border: 1px solid #e0ddd5;
+      border-radius: 20px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+      animation: fadeUp 0.5s ease;
+    }
+    .login-logo { text-align:center; margin-bottom:32px; }
+    .login-logo h1 { font-size:22px; font-weight:700; color:var(--text); margin:0; }
+    .login-logo p { color:var(--text-muted); margin:4px 0 0; font-size:14px; }
+    .form-group { margin-bottom:20px; }
+    .form-group label { display:block; font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:500; }
+    .form-group input {
+      width:100%; padding:14px 16px; background:#f5f4f0;
+      border:1.5px solid #e0ddd5; border-radius:10px;
+      color:#1a1a1a; font-size:15px; font-family:inherit;
+      transition:border-color 0.2s; box-sizing:border-box;
+    }
+    .form-group input:focus { outline:none; border-color:var(--accent); }
+    .btn-login {
+      width:100%; padding:15px; background:#c9a227;
+      color:#1a1a1a; border:none; border-radius:10px;
+      font-size:16px; font-weight:600; font-family:inherit;
+      cursor:pointer; transition:opacity 0.2s, transform 0.1s;
+    }
+    .btn-login:hover { opacity:0.9; transform:translateY(-1px); }
+    .btn-login:active { transform:translateY(0); }
+    .error-msg { color:#ff6b6b; font-size:13px; text-align:center; margin-top:12px; display:none; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="images/logo.png" alt="Logo" style="width:100px;height:100px;object-fit:contain;margin-bottom:16px;"/>
+      <h1>Kanlungan Coffee Garage</h1>
+      <p>Admin Dashboard</p>
+    </div>
+    <form id="loginForm">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="username" placeholder="admin" autocomplete="username" required/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required/>
+      </div>
+      <button type="submit" class="btn-login">Sign In</button>
+      <div class="error-msg" id="errorMsg">Invalid username or password.</div>
+    </form>
+  </div>
+  <script src="js/auth.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (localStorage.getItem('kape_token')) window.location.href = 'index.html';
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const result = await login(username, password);
+      if (result.success) {
+        window.location.href = 'index.html';
+      } else {
+        document.getElementById('errorMsg').style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

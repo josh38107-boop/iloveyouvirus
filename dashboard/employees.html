@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Employees — Kanlungan Coffee Garage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text">
+        <h2>Kanlungan<br/>Coffee Garage</h2>
+        <p>Admin Panel</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">📊</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">🧾</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">📈</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
+      <a href="employees.html" class="nav-item active"><span class="nav-icon">👥</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
+    </nav>
+    <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div><h1>Employees</h1><div style="font-size:13px;color:var(--text-muted);">Staff management</div></div>
+      <div class="topbar-right">
+        <span class="topbar-time" id="topbarTime"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="content fade-up">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Staff List</div>
+          <button class="btn btn-outline" onclick="loadEmployees()">🔄 Refresh</button>
+        </div>
+        <div id="employeesTable">
+          <div class="loading"><div class="spinner"></div> Loading employees...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+  requireAuth(); startClock();
+
+  async function loadEmployees() {
+    const el = document.getElementById('employeesTable');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+    const emps = await api.getEmployees();
+    if (!emps?.length) {
+      el.innerHTML = '<div class="empty-state"><span class="icon">👥</span><p>No employees found</p></div>'; return;
+    }
+    el.innerHTML = `<table class="data-table">
+      <thead><tr><th>Name</th><th>Role</th><th>PIN</th><th>Status</th></tr></thead>
+      <tbody>${emps.map(e => `
+        <tr>
+          <td style="font-weight:500;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:36px;height:36px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                ${e.name.charAt(0).toUpperCase()}
+              </div>
+              ${e.name}
+            </div>
+          </td>
+          <td><span class="badge ${e.role==='manager'||e.role==='admin'?'badge-warning':'badge-info'}">${e.role}</span></td>
+          <td style="font-family:monospace;color:var(--text-muted);">••••</td>
+          <td><span class="badge ${e.active?'badge-success':'badge-danger'}">${e.active?'Active':'Inactive'}</span></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  loadEmployees();
+</script>
+</body>
+</html>

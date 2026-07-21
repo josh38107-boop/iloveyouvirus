@@ -1,0 +1,12 @@
+PRAGMA foreign_keys=OFF;
+DELETE FROM Receipt;
+DELETE FROM Payment;
+DELETE FROM OrderLine;
+DELETE FROM PosOrder;
+DELETE FROM Shift;
+DELETE FROM InventoryAdjustment;
+DELETE FROM StockSnapshot;
+DELETE FROM ClosedShiftAdjustment;
+DELETE FROM sqlite_sequence WHERE name IN ('Payment','OrderLine','Shift','InventoryAdjustment','ClosedShiftAdjustment');
+PRAGMA wal_checkpoint(TRUNCATE);
+VACUUM;

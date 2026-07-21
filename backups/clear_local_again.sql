@@ -1,0 +1,12 @@
+PRAGMA foreign_keys=OFF;
+BEGIN IMMEDIATE;
+DELETE FROM Receipt;
+DELETE FROM Payment;
+DELETE FROM OrderLine;
+DELETE FROM PosOrder;
+DELETE FROM Shift;
+DELETE FROM InventoryAdjustment;
+DELETE FROM StockSnapshot;
+DELETE FROM ClosedShiftAdjustment;
+COMMIT;
+PRAGMA wal_checkpoint(TRUNCATE);

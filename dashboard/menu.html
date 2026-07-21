@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Menu — Kanlungan Coffee Garage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text">
+        <h2>Kanlungan<br/>Coffee Garage</h2>
+        <p>Admin Panel</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">📊</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">🧾</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">📈</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item active"><span class="nav-icon">🍵</span> Menu</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
+    </nav>
+    <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div><h1>Menu</h1><div style="font-size:13px;color:var(--text-muted);">Products & categories</div></div>
+      <div class="topbar-right">
+        <span class="topbar-time" id="topbarTime"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="content fade-up">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Menu Items</div>
+          <button class="btn btn-outline" onclick="loadMenu()">🔄 Refresh</button>
+        </div>
+
+        <!-- Category filter tabs -->
+        <div id="categoryTabs" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;"></div>
+
+        <div id="menuTable">
+          <div class="loading"><div class="spinner"></div> Loading menu...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+  requireAuth(); startClock();
+  let allItems = [], allCategories = [], activeCategory = 'all';
+
+  async function loadMenu() {
+    const el = document.getElementById('menuTable');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
+    [allCategories, allItems] = await Promise.all([api.getMenuCategories(), api.getMenuItems()]);
+
+    // Build category tabs
+    const tabs = document.getElementById('categoryTabs');
+    tabs.innerHTML = `<button class="btn ${activeCategory==='all'?'btn-primary':'btn-outline'}" onclick="filterCategory('all')">All</button>` +
+      (allCategories || []).map(c =>
+        `<button class="btn ${activeCategory===c.id?'btn-primary':'btn-outline'}" onclick="filterCategory('${c.id}')">${c.name}</button>`
+      ).join('');
+
+    renderMenu();
+  }
+
+  function filterCategory(id) {
+    activeCategory = id;
+    loadMenu();
+  }
+
+  function renderMenu() {
+    const el = document.getElementById('menuTable');
+    const items = activeCategory === 'all' ? allItems : allItems.filter(i => i.category_id === activeCategory);
+    if (!items?.length) {
+      el.innerHTML = '<div class="empty-state"><span class="icon">🍵</span><p>No items found</p></div>'; return;
+    }
+    const catMap = Object.fromEntries((allCategories||[]).map(c => [c.id, c.name]));
+    el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table">
+      <thead><tr><th>Name</th><th>Category</th><th>Base Price</th><th>Status</th></tr></thead>
+      <tbody>${items.map(item => `
+        <tr>
+          <td style="font-weight:500;">${item.name}</td>
+          <td><span class="badge badge-info">${catMap[item.category_id] || item.category_id}</span></td>
+          <td style="font-weight:600;color:var(--accent);">${formatPeso(item.base_price_cents)}</td>
+          <td><span class="badge ${item.active?'badge-success':'badge-danger'}">${item.active?'Active':'Hidden'}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>`;
+  }
+
+  loadMenu();
+</script>
+</body>
+</html>
