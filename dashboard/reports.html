@@ -28,6 +28,7 @@
       <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
       <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
+      <a href="devices.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 8.5 4.75 4.75 0 0 0 7 18Z"/></svg></span> Cloud Devices</a>
     </nav>
     <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
   </aside>
@@ -37,12 +38,13 @@
       <div><h1>Reports</h1><div style="font-size:13px;color:var(--text-muted);">Sales analytics</div></div>
       <div class="topbar-right">
         <select class="input" id="periodSelect" onchange="loadReports()" style="padding:7px 12px;font-size:13px;">
-          <option value="7">Last 7 days</option>
+          <option value="1">Today</option>
+          <option value="7" selected>Last 7 days</option>
           <option value="14">Last 14 days</option>
           <option value="30">Last 30 days</option>
         </select>
-        <button class="btn" style="background:#1a1a1a;color:#ffffff;border-radius:99px;padding:8px 18px;font-weight:600;" onclick="exportReportsExcelCsv()">
-          📊 Export Excel/CSV
+        <button class="btn" id="exportReportsButton" style="background:#1a1a1a;color:#ffffff;border-radius:99px;padding:8px 18px;font-weight:600;" onclick="exportReportsExcelCsv()">
+          📊 Export Excel
         </button>
         <span class="topbar-time" id="topbarTime"></span>
         <button class="btn-logout" onclick="logout()">Sign Out</button>
@@ -82,13 +84,14 @@
 
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/report-export.js"></script>
 <script>
   requireAuth(); startClock();
   let revenueChartInst, ordersChartInst, reportData = [];
 
   async function loadReports() {
     const days = parseInt(document.getElementById('periodSelect').value);
-    document.getElementById('chartSubtitle').textContent = `Last ${days} days`;
+    document.getElementById('chartSubtitle').textContent = days === 1 ? 'Today' : `Last ${days} days`;
     reportData = await api.getSales(days);
     if (!reportData) return;
 
@@ -136,87 +139,25 @@
     });
   }
 
-  // Export Daily Reports Excel / CSV (100% match to Daily Report template)
+  // Export a formatted workbook matching the Daily Report template.
   async function exportReportsExcelCsv() {
-    const days = document.getElementById('periodSelect').value;
-    const now = new Date();
-    const dateStr = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const dateRangeLabel = days === '1' ? 'Today' : `Last ${days} Days`;
-
-    // Fetch stats for breakdown
-    let stats = { ordersToday: 0, revenueToday: 0, topItems: [], paymentBreakdown: [] };
+    const days = parseInt(document.getElementById('periodSelect').value);
+    const button = document.getElementById('exportReportsButton');
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Preparing Excel...';
     try {
-      stats = (await api.getStats()) || stats;
-    } catch (e) {}
-
-    const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders || 0), 0);
-    const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue || 0), 0) / 100;
-
-    const paymentLines = [];
-    if (stats.paymentBreakdown && stats.paymentBreakdown.length > 0) {
-      stats.paymentBreakdown.forEach(p => {
-        paymentLines.push(`${p.method},${(p.total / 100).toFixed(2)}`);
-      });
-    } else {
-      paymentLines.push(`No transactions,0.00`);
+      const stats = await api.getStats(days);
+      if (!stats) throw new Error('No report data was returned');
+      ReportWorkbook.download(stats, days);
+    } catch (error) {
+      alert('Unable to export the report: ' + error.message);
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.innerHTML = originalLabel;
     }
-
-    const topItemsLines = [];
-    if (stats.topItems && stats.topItems.length > 0) {
-      stats.topItems.forEach(item => {
-        topItemsLines.push(`${item.name},${parseFloat(item.qty).toFixed(2)},0.00`);
-      });
-    } else {
-      topItemsLines.push(`No items sold,0.00,0.00`);
-    }
-
-    const lines = [
-      `,Kanlungan Coffee Garage POS - Daily Report`,
-      `,Clean export layout - Black & White only`,
-      ``,
-      `REPORT DETAILS`,
-      `    Report Field,Value`,
-      `Report Date Range,${dateRangeLabel}`,
-      `Generated At,${dateStr}`,
-      ``,
-      `SUMMARY METRICS`,
-      `    Metric,Value`,
-      `Total Orders,${totalOrders}`,
-      `Gross Sales,${totalRevenue.toFixed(2)}`,
-      `Net Sales,${totalRevenue.toFixed(2)}`,
-      ``,
-      `PAYMENT BREAKDOWN`,
-      `    Payment Method,Total Amount`,
-      ...paymentLines,
-      ``,
-      `TOP SELLING ITEMS`,
-      `    Item Name,Quantity Sold,Revenue`,
-      ...topItemsLines,
-      ``,
-      `CASH DRAWER SUMMARY`,
-      `    Metric,Value`,
-      `Starting Cash,0.00`,
-      `Expected Cash Ending,0.00`,
-      `Online Payments,0.00`,
-      `Total Cash + Online Payment,0.00`,
-      `Actual Cash Ending,0.00`,
-      `Difference,0.00`,
-      `Cash Sales,0.00`,
-      `Cash Added,0.00`,
-      `Cash Removed,0.00`,
-      ``,
-      `    End of Daily Report`
-    ];
-
-    const csvContent = '\uFEFF' + lines.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Kanlungan_Daily_Report_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   loadReports();

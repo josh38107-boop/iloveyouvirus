@@ -66,7 +66,7 @@
   <script src="js/auth.js"></script>
   <script>
     // Redirect if already logged in
-    if (localStorage.getItem('kape_token')) window.location.href = 'index.html';
+    if (sessionStorage.getItem('kape_admin_session')) window.location.href = 'index.html';
 
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();

@@ -4,16 +4,33 @@
  */
 
 // ─── apply_inventory_event ────────────────────────────────────────────────────
-async function apply_inventory_event({ ingredient_id, delta, branch_id, event_id, reason }, db) {
+async function apply_inventory_event({ ingredient_id, delta, delta_quantity, branch_id, event_id, reason, created_at, authenticated_device_id }, db) {
+  delta = delta ?? delta_quantity;
   if (!ingredient_id || delta == null) throw new Error('ingredient_id and delta required');
-  const result = await db.query(`
-    INSERT INTO inventory_balance (branch_id, ingredient_id, quantity)
-    VALUES ($1, $2, $3)
-    ON CONFLICT (branch_id, ingredient_id)
-    DO UPDATE SET quantity = inventory_balance.quantity + $3
-    RETURNING *
-  `, [branch_id || 'main', ingredient_id, delta]);
-  return result.rows[0] || {};
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (event_id) {
+      const inserted = await client.query(`INSERT INTO sync_inventory_event
+        (event_id, branch_id, device_id, ingredient_id, delta_quantity, reason, created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
+        [event_id, branch_id || 'main', authenticated_device_id || null, ingredient_id, delta, reason || null, created_at || Date.now()]);
+      if (!inserted.rowCount) {
+        const existing = await client.query('SELECT * FROM inventory_balance WHERE branch_id=$1 AND ingredient_id=$2', [branch_id || 'main', ingredient_id]);
+        await client.query('COMMIT');
+        return existing.rows[0] || {};
+      }
+    }
+    const result = await client.query(`INSERT INTO inventory_balance (branch_id, ingredient_id, quantity)
+      VALUES ($1, $2, $3) ON CONFLICT (branch_id, ingredient_id)
+      DO UPDATE SET quantity = inventory_balance.quantity + EXCLUDED.quantity RETURNING *`,
+      [branch_id || 'main', ingredient_id, delta]);
+    await client.query('COMMIT');
+    return result.rows[0] || {};
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally { client.release(); }
 }
 
 // ─── get_promotion_config ─────────────────────────────────────────────────────

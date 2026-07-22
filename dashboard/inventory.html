@@ -27,6 +27,7 @@
       <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
       <a href="inventory.html" class="nav-item active"><span class="nav-icon">📦</span> Inventory</a>
+      <a href="devices.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 8.5 4.75 4.75 0 0 0 7 18Z"/></svg></span> Cloud Devices</a>
     </nav>
     <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
   </aside>
@@ -54,7 +55,7 @@
           <div class="card-title">All Ingredients</div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <button class="btn" style="background:#1a1a1a;color:#ffffff;border-radius:99px;padding:9px 20px;font-weight:600;" onclick="exportExcelCsv()">
-              📊 Export Excel/CSV
+              📊 Export Excel
             </button>
             <button class="btn btn-primary" style="border-radius:99px;" onclick="openEditModal()">
               + Add Ingredient
@@ -109,6 +110,7 @@
 
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>
+<script src="js/inventory-export.js"></script>
 <script>
   requireAuth(); startClock();
   let inventoryData = [];
@@ -206,28 +208,10 @@
     }
   }
 
-  // Export Excel / CSV
+  // Export a formatted Excel workbook matching the inventory report template.
   function exportExcelCsv() {
     if (!inventoryData.length) return alert('No data to export');
-    const headers = ['ID', 'Name', 'Unit', 'Quantity On Hand', 'Low Stock Threshold', 'Takeout Only'];
-    const rows = inventoryData.map(i => [
-      `"${i.id}"`,
-      `"${i.name.replace(/"/g, '""')}"`,
-      `"${i.unit}"`,
-      i.quantity_on_hand,
-      i.low_stock_threshold,
-      i.takeout_only || false
-    ]);
-    // UTF-8 BOM prefix (\uFEFF) ensures Excel displays characters properly
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `kanlungan_inventory_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    InventoryWorkbook.download(inventoryData);
   }
 
   // Import CSV

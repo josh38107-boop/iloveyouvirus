@@ -3642,7 +3642,7 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                         Column(Modifier.weight(1f)) {
                             Text("Free Drink QR Promotion", fontWeight = FontWeight.Bold)
                             Text(
-                                "Cloud-controlled across every POS connected to this Supabase project.",
+                                "Cloud-controlled across every POS connected to this Render service.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
@@ -3657,7 +3657,7 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                     if (!state.promotionConfig.available) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                state.promotionError ?: "Run the complete Supabase schema repair before configuring this promotion.",
+                                state.promotionError ?: "Deploy the complete Render database migration before configuring this promotion.",
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -3669,7 +3669,7 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                                 if (state.promotionBusy) {
                                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                 } else {
-                                    Text("Retry Supabase Check")
+                                    Text("Retry Render Check")
                                 }
                             }
                         }
@@ -3953,25 +3953,26 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
 
         Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Cloud Synchronization (Supabase)", fontWeight = FontWeight.Bold)
-                Text("Connect this tablet to the cloud database to sync sales in real-time.", fontSize = 13.sp, color = Color.Gray)
+                Text("Render Cloud Synchronization", fontWeight = FontWeight.Bold)
+                Text("Enroll this tablet to synchronize securely through your Render service.", fontSize = 13.sp, color = Color.Gray)
 
                 val syncManager = viewModel.supabaseSyncManager
-                var url by remember { mutableStateOf(syncManager.supabaseUrl) }
-                var key by remember { mutableStateOf(syncManager.supabaseKey) }
+                var url by remember { mutableStateOf(syncManager.renderCloudUrl) }
+                var enrollmentCode by remember { mutableStateOf("") }
                 var name by remember { mutableStateOf(syncManager.deviceName) }
 
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("Supabase Project URL") },
+                    label = { Text("Render Cloud URL") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("Supabase Anon API Key") },
+                    value = enrollmentCode,
+                    onValueChange = { enrollmentCode = it },
+                    label = { Text(if (syncManager.isEnrolled) "Enrollment Code (already enrolled)" else "Enrollment Code") },
+                    enabled = !syncManager.isEnrolled,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -4004,10 +4005,10 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                viewModel.updateSupabaseConfig(url, key, name)
+                                viewModel.updateRenderCloudConfig(url, enrollmentCode, name)
                             }
                         ) {
-                            Text("Save & Sync")
+                            Text(if (syncManager.isEnrolled) "Save & Sync" else "Enroll & Sync")
                         }
                         if (syncManager.isConfigured()) {
                             OutlinedButton(

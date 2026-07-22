@@ -1,47 +1,40 @@
-// Auth helpers — stores token in localStorage
+// Admin auth uses an expiring HttpOnly session cookie; no secret is stored in JavaScript.
 
 async function login(username, password) {
   try {
-    const res = await fetch(`${API_BASE}/admin/login`, {
+    const res = await fetch(`${window.location.origin}/admin/login`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
     if (!res.ok) return { success: false };
     const data = await res.json();
-    if (data.token) {
-      localStorage.setItem('kape_token', data.token);
-      localStorage.setItem('kape_user', username);
-      return { success: true };
-    }
-    return { success: false };
+    if (!data.success) return { success: false };
+    sessionStorage.setItem('kape_admin_session', 'active');
+    sessionStorage.setItem('kape_user', data.user || username);
+    return { success: true };
   } catch {
-    // Fallback: check hardcoded credentials for demo
-    const ADMIN_USER = window.ADMIN_USERNAME || 'admin';
-    const ADMIN_PASS = window.ADMIN_PASSWORD || 'KapeAdmin2024';
-    if (username === ADMIN_USER && password === ADMIN_PASS) {
-      localStorage.setItem('kape_token', window.API_KEY || 'KapeAdmin2024SecretKey');
-      localStorage.setItem('kape_user', username);
-      return { success: true };
-    }
-    return { success: false };
+    return { success: false, error: 'Cannot reach the Render service.' };
   }
 }
 
-function logout() {
-  localStorage.removeItem('kape_token');
-  localStorage.removeItem('kape_user');
+async function logout(callServer = true) {
+  if (callServer) {
+    await fetch(`${window.location.origin}/admin/logout`, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  }
+  sessionStorage.removeItem('kape_admin_session');
+  sessionStorage.removeItem('kape_user');
   window.location.href = 'login.html';
 }
 
 function requireAuth() {
-  if (!localStorage.getItem('kape_token')) {
+  if (!sessionStorage.getItem('kape_admin_session')) {
     window.location.href = 'login.html';
     return false;
   }
+  fetch(`${window.location.origin}/admin/session`, { credentials: 'same-origin' })
+    .then((res) => { if (!res.ok) logout(false); })
+    .catch(() => {});
   return true;
-}
-
-function getToken() {
-  return localStorage.getItem('kape_token') || '';
 }

@@ -4,10 +4,11 @@ const cors = require('cors');
 const path = require('path');
 const db = require('./db');
 const rpc = require('./rpc');
+const { createCloud } = require('./cloud');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_KEY = process.env.API_KEY || 'changeme';
+const cloud = createCloud(db);
 
 // ─── Allowed tables (whitelist for security) ─────────────────────────────────
 const ALLOWED_TABLES = new Set([
@@ -20,31 +21,16 @@ const ALLOWED_TABLES = new Set([
 ]);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: '*' }));
+app.set('trust proxy', 1);
+app.use(cors(cloud.corsOptions));
 app.use(express.json({ limit: '10mb' }));
+cloud.attachRoutes(app);
 
 // ─── Serve Admin Dashboard as static files ────────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'dashboard')));
 
-// ─── Admin Login ──────────────────────────────────────────────────────────────
-app.post('/admin/login', (req, res) => {
-  const { username, password } = req.body || {};
-  const ADMIN_USER = process.env.ADMIN_USERNAME || 'admin';
-  const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'KapeAdmin2024';
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    return res.json({ token: API_KEY, success: true });
-  }
-  return res.status(401).json({ error: 'Invalid credentials' });
-});
-app.use(express.json({ limit: '10mb' }));
-
-// Auth middleware — accepts apikey header or Authorization: Bearer <key>
-function authenticate(req, res, next) {
-  const apikey = req.headers['apikey'] || '';
-  const bearer = (req.headers['authorization'] || '').replace('Bearer ', '');
-  if (apikey === API_KEY || bearer === API_KEY) return next();
-  return res.status(401).json({ error: 'Unauthorized' });
-}
+const authenticate = cloud.legacyAuth;
+const adminAuthenticate = cloud.adminAuth;
 
 // ─── Parse PostgREST-style filter query params ────────────────────────────────
 function parseFilters(query) {
@@ -141,7 +127,10 @@ async function handlePost(req, res, table) {
       }
 
       const result = await db.query(sql, vals);
-      if (result.rows.length) results.push(result.rows[0]);
+      if (result.rows.length) {
+        results.push(result.rows[0]);
+        if (req.path.startsWith('/admin/data/')) await cloud.recordAdminChange(table, result.rows[0]);
+      }
     }
 
     return res.status(201).json(results);
@@ -165,6 +154,9 @@ async function handlePatch(req, res, table) {
 
     const sql = `UPDATE "${table}" SET ${setClause} ${clause} RETURNING *`;
     const result = await db.query(sql, [...vals, ...values]);
+    if (req.path.startsWith('/admin/data/')) {
+      for (const row of result.rows) await cloud.recordAdminChange(table, row);
+    }
     return res.json(result.rows);
   } catch (err) {
     console.error(`PATCH ${table}:`, err.message);
@@ -180,6 +172,9 @@ async function handleDelete(req, res, table) {
     if (!clause) return res.status(400).json({ error: 'Delete requires filters' });
     const sql = `DELETE FROM "${table}" ${clause} RETURNING *`;
     const result = await db.query(sql, values);
+    if (req.path.startsWith('/admin/data/')) {
+      for (const row of result.rows) await cloud.recordAdminChange(table, row, 'delete');
+    }
     return res.json(result.rows);
   } catch (err) {
     console.error(`DELETE ${table}:`, err.message);
@@ -193,6 +188,12 @@ app.all('/rest/v1/:table', authenticate, async (req, res) => {
   if (!ALLOWED_TABLES.has(table)) {
     return res.status(404).json({ error: `Table '${table}' not found` });
   }
+  const managerTables = new Set(['sync_device_authority', 'sync_tombstone', 'menu_category', 'menu_item', 'modifier_group',
+    'modifier_option', 'menu_item_modifier_group', 'ingredient', 'recipe_ingredient', 'modifier_recipe_ingredient',
+    'payment_method', 'employee', 'store_settings']);
+  if (req.syncDevice && req.method !== 'GET' && managerTables.has(table) && req.syncDevice.role !== 'manager') {
+    return res.status(403).json({ error: 'Manager device role required' });
+  }
   switch (req.method) {
     case 'GET':    return handleGet(req, res, table);
     case 'POST':   return handlePost(req, res, table);
@@ -202,53 +203,146 @@ app.all('/rest/v1/:table', authenticate, async (req, res) => {
   }
 });
 
+app.all('/admin/data/:table', adminAuthenticate, async (req, res) => {
+  const { table } = req.params;
+  if (!ALLOWED_TABLES.has(table)) return res.status(404).json({ error: `Table '${table}' not found` });
+  switch (req.method) {
+    case 'GET': return handleGet(req, res, table);
+    case 'POST': return handlePost(req, res, table);
+    case 'PATCH': return handlePatch(req, res, table);
+    case 'DELETE': return handleDelete(req, res, table);
+    default: return res.status(405).json({ error: 'Method not allowed' });
+  }
+});
+
 // ─── RPC routes ───────────────────────────────────────────────────────────────
-app.post('/rest/v1/rpc/:fn', authenticate, async (req, res) => {
+async function handleRpc(req, res) {
   const { fn } = req.params;
   const handler = rpc[fn];
   if (!handler) return res.status(404).json({ error: `RPC '${fn}' not found` });
   try {
-    const result = await handler(req.body || {}, db);
+    const normalized = {};
+    for (const [key, value] of Object.entries(req.body || {})) normalized[key.startsWith('p_') ? key.slice(2) : key] = value;
+    if (req.syncDevice) normalized.authenticated_device_id = req.syncDevice.id;
+    const result = await handler(normalized, db);
     return res.json(result);
   } catch (err) {
     console.error(`RPC ${fn}:`, err.message);
     return res.status(500).json({ error: err.message });
   }
+}
+
+app.post('/rest/v1/rpc/:fn', authenticate, handleRpc);
+app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, (req, res, next) => {
+  if (req.params.fn === 'update_promotion_config' && req.syncDevice.role !== 'manager') {
+    return res.status(403).json({ error: 'Manager device role required' });
+  }
+  return handleRpc(req, res, next);
 });
 
 // ─── Admin Dashboard API routes ───────────────────────────────────────────────
 
-// GET /admin/stats — today's summary stats
-app.get('/admin/stats', authenticate, async (req, res) => {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayMs = today.getTime();
+function reportRange(daysParam) {
+  const parsed = parseInt(daysParam, 10);
+  const days = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), 365);
+  const from = new Date();
+  from.setHours(0, 0, 0, 0);
+  from.setDate(from.getDate() - (days - 1));
+  return { days, fromMs: from.getTime() };
+}
 
-    const [ordersRes, revenueRes, topItemsRes, paymentRes] = await Promise.all([
-      db.query(`SELECT COUNT(*) as count FROM pos_order WHERE created_at >= $1 AND status != 'void'`, [todayMs]),
-      db.query(`SELECT COALESCE(SUM(total_cents),0) as total FROM pos_order WHERE created_at >= $1 AND status != 'void'`, [todayMs]),
+function paymentCategory(row) {
+  const category = String(row.payment_category || '').toUpperCase();
+  if (category === 'CASH' || category === 'ONLINE') return category;
+  const method = String(row.method || '').toLowerCase();
+  if (method === 'cash') return 'CASH';
+  if (method === 'online' || method === 'gcash') return 'ONLINE';
+  return '';
+}
+
+// GET /admin/stats?days=1 — report summary for the selected date range
+app.get('/admin/stats', adminAuthenticate, async (req, res) => {
+  try {
+    const { days, fromMs } = reportRange(req.query.days);
+    const [summaryRes, topItemsRes, paymentRes, shiftsRes] = await Promise.all([
       db.query(`
-        SELECT name, SUM(quantity) as qty
+        SELECT COUNT(*) as count,
+               COALESCE(SUM(subtotal_cents), 0) as gross,
+               COALESCE(SUM(total_cents), 0) as net
+        FROM pos_order
+        WHERE created_at >= $1 AND status != 'void'
+      `, [fromMs]),
+      db.query(`
+        SELECT name, SUM(quantity) as qty,
+               COALESCE(SUM(ol.quantity * ol.unit_price_cents - COALESCE(ol.discount_cents, 0)), 0) as revenue
         FROM order_line ol
         JOIN pos_order o ON o.id = ol.order_id
         WHERE o.created_at >= $1 AND o.status != 'void'
         GROUP BY name ORDER BY qty DESC LIMIT 5
-      `, [todayMs]),
+      `, [fromMs]),
       db.query(`
-        SELECT method, SUM(amount_cents) as total
+        SELECT method, payment_category, SUM(amount_cents) as total
         FROM payment p
         JOIN pos_order o ON o.id = p.order_id
         WHERE o.created_at >= $1 AND o.status != 'void'
-        GROUP BY method
-      `, [todayMs])
+        GROUP BY method, payment_category
+        ORDER BY method
+      `, [fromMs]),
+      db.query(`
+        SELECT s.id, s.starting_cash_cents, s.ending_cash_cents,
+               s.cash_added_cents, s.cash_removed_cents,
+               COALESCE(SUM(CASE
+                 WHEN UPPER(COALESCE(p.payment_category, '')) = 'CASH'
+                   OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) = 'cash')
+                 THEN p.amount_cents ELSE 0 END), 0) as cash_sales
+        FROM shift s
+        LEFT JOIN pos_order o ON o.shift_id = s.id AND o.status != 'void'
+        LEFT JOIN payment p ON p.order_id = o.id
+        WHERE s.opened_at >= $1
+        GROUP BY s.id, s.starting_cash_cents, s.ending_cash_cents,
+                 s.cash_added_cents, s.cash_removed_cents, s.opened_at
+        ORDER BY s.opened_at
+      `, [fromMs])
     ]);
 
+    const payments = paymentRes.rows;
+    const cashSales = payments
+      .filter(row => paymentCategory(row) === 'CASH')
+      .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
+    const onlinePayments = payments
+      .filter(row => paymentCategory(row) === 'ONLINE')
+      .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
+    const cashDrawer = shiftsRes.rows.reduce((totals, shift) => {
+      const starting = parseInt(shift.starting_cash_cents || 0);
+      const added = parseInt(shift.cash_added_cents || 0);
+      const removed = parseInt(shift.cash_removed_cents || 0);
+      const shiftCashSales = parseInt(shift.cash_sales || 0);
+      const expected = starting + shiftCashSales + added - removed;
+      const actual = shift.ending_cash_cents == null
+        ? expected
+        : parseInt(shift.ending_cash_cents || 0);
+      totals.startingCash += starting;
+      totals.expectedCashEnding += expected;
+      totals.actualCashEnding += actual;
+      totals.cashAdded += added;
+      totals.cashRemoved += removed;
+      return totals;
+    }, { startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
+
+    cashDrawer.onlinePayments = onlinePayments;
+    cashDrawer.totalCashAndOnline = cashDrawer.expectedCashEnding + onlinePayments;
+    cashDrawer.difference = cashDrawer.actualCashEnding - cashDrawer.expectedCashEnding;
+    cashDrawer.cashSales = cashSales;
+
     res.json({
-      ordersToday: parseInt(ordersRes.rows[0].count),
-      revenueToday: parseInt(revenueRes.rows[0].total),
+      days,
+      ordersToday: parseInt(summaryRes.rows[0].count),
+      revenueToday: parseInt(summaryRes.rows[0].net),
+      grossSales: parseInt(summaryRes.rows[0].gross),
+      netSales: parseInt(summaryRes.rows[0].net),
       topItems: topItemsRes.rows,
-      paymentBreakdown: paymentRes.rows
+      paymentBreakdown: payments,
+      cashDrawer
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -256,10 +350,9 @@ app.get('/admin/stats', authenticate, async (req, res) => {
 });
 
 // GET /admin/sales?days=7 — sales chart data
-app.get('/admin/sales', authenticate, async (req, res) => {
+app.get('/admin/sales', adminAuthenticate, async (req, res) => {
   try {
-    const days = parseInt(req.query.days) || 7;
-    const from = Date.now() - days * 24 * 60 * 60 * 1000;
+    const { fromMs } = reportRange(req.query.days || 7);
     const result = await db.query(`
       SELECT
         TO_CHAR(TO_TIMESTAMP(created_at / 1000), 'YYYY-MM-DD') as date,
@@ -268,7 +361,7 @@ app.get('/admin/sales', authenticate, async (req, res) => {
       FROM pos_order
       WHERE created_at >= $1 AND status != 'void'
       GROUP BY date ORDER BY date
-    `, [from]);
+    `, [fromMs]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -276,7 +369,7 @@ app.get('/admin/sales', authenticate, async (req, res) => {
 });
 
 // GET /admin/orders?limit=50&offset=0 — paginated orders
-app.get('/admin/orders', authenticate, async (req, res) => {
+app.get('/admin/orders', adminAuthenticate, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const offset = parseInt(req.query.offset) || 0;
@@ -294,7 +387,7 @@ app.get('/admin/orders', authenticate, async (req, res) => {
 });
 
 // GET /admin/inventory — stock levels with low-stock flag
-app.get('/admin/inventory', authenticate, async (req, res) => {
+app.get('/admin/inventory', adminAuthenticate, async (req, res) => {
   try {
     const result = await db.query(`
       SELECT id, name, unit, quantity_on_hand,
@@ -311,6 +404,30 @@ app.get('/admin/inventory', authenticate, async (req, res) => {
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
+app.get('/ready', async (req, res) => {
+  try {
+    const schema = await db.query(`SELECT
+      to_regclass('public.sync_device') AS sync_device,
+      to_regclass('public.sync_enrollment') AS sync_enrollment,
+      to_regclass('public.sync_mutation') AS sync_mutation,
+      to_regclass('public.sync_change') AS sync_change`);
+    if (Object.values(schema.rows[0]).some(value => value == null)) {
+      return res.status(503).json({ status: 'migration_required', command: 'cd backend && npm run migrate' });
+    }
+    res.json({ status: 'ready', timestamp: Date.now() });
+  } catch {
+    res.status(503).json({ status: 'not_ready' });
+  }
+});
+
+app.use((err, req, res, next) => {
+  console.error(`${req.method} ${req.path}:`, err);
+  if (res.headersSent) return next(err);
+  if (err.code === '42P01') {
+    return res.status(503).json({ error: 'Render database migration required', command: 'cd backend && npm run migrate' });
+  }
+  res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
+});
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 app.listen(PORT, () => {

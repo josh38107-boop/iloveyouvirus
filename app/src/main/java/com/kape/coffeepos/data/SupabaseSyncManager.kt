@@ -24,9 +24,12 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.UnknownHostException
+import java.security.MessageDigest
 import java.util.Calendar
 import java.util.TimeZone
 import java.util.UUID
+import kotlin.math.min
+import kotlin.random.Random
 
 private val PUBLIC_DNS_SERVERS = listOf("1.1.1.1", "8.8.8.8")
 
@@ -112,6 +115,20 @@ data class BranchDeviceAuthority(
     val revision: Long = 1
 )
 
+private data class EnrolledRenderDevice(
+    val id: String,
+    val branchId: String,
+    val hardwareId: String,
+    val name: String,
+    val role: String
+)
+
+private data class RenderEnrollmentResponse(
+    val token: String?,
+    val device: EnrolledRenderDevice?,
+    val serverVersion: String?
+)
+
 internal data class IngredientCatalogMetadata(
     val id: String,
     val name: String,
@@ -151,7 +168,7 @@ class SupabaseSyncManager(
     private val context: Context,
     private val db: AppDatabase
 ) {
-    private val TAG = "SupabaseSync"
+    private val TAG = "RenderCloudSync"
     private val syncMutex = Mutex()
     private val promotionSyncMutex = Mutex()
     
@@ -159,15 +176,28 @@ class SupabaseSyncManager(
     private val mappingPrefs: SharedPreferences = context.getSharedPreferences("supabase_shift_mappings", Context.MODE_PRIVATE)
     private val syncPrefs: SharedPreferences = context.getSharedPreferences("supabase_sync_state", Context.MODE_PRIVATE)
     private val promotionPrefs: SharedPreferences = context.getSharedPreferences("promotion_pending_state", Context.MODE_PRIVATE)
+    private val tokenStore = SecureTokenStore(context)
 
     // Configuration properties
     var supabaseUrl: String
         get() = prefs.getString("url", "") ?: ""
         set(value) = prefs.edit().putString("url", value.trim().trimEnd('/')).apply()
 
+    var renderCloudUrl: String
+        get() = supabaseUrl
+        set(value) { supabaseUrl = value }
+
     var supabaseKey: String
         get() = prefs.getString("key", "") ?: ""
         set(value) = prefs.edit().putString("key", value.trim()).apply()
+
+    private var deviceToken: String
+        get() = tokenStore.read()
+        set(value) = tokenStore.write(value)
+
+    private var enrolledRole: String
+        get() = prefs.getString("render_device_role", "") ?: ""
+        set(value) = prefs.edit().putString("render_device_role", value).apply()
 
     var deviceName: String
         get() = prefs.getString("device_name", "") ?: ""
@@ -188,7 +218,7 @@ class SupabaseSyncManager(
         get() = _authorityRevision.value
         private set(value) { _authorityRevision.value = value }
 
-    val isManagerTablet: Boolean get() = managerDeviceId.isNotBlank() && managerDeviceId == deviceId
+    val isManagerTablet: Boolean get() = enrolledRole == "manager" || (managerDeviceId.isNotBlank() && managerDeviceId == deviceId)
     val deviceRoleLabel: String get() = if (isManagerTablet) "Manager Tablet" else "Counter"
 
     val deviceId: String
@@ -267,7 +297,52 @@ class SupabaseSyncManager(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     fun isConfigured(): Boolean {
-        return supabaseUrl.isNotEmpty() && supabaseKey.isNotEmpty()
+        return renderCloudUrl.isNotEmpty() && deviceToken.isNotEmpty()
+    }
+
+    val isEnrolled: Boolean get() = deviceToken.isNotEmpty()
+
+    suspend fun enroll(renderUrl: String, enrollmentCode: String, requestedName: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(renderUrl.isNotBlank()) { "Enter the Render Cloud URL." }
+            require(!renderUrl.contains("YOUR-SERVICE", ignoreCase = true)) {
+                "Replace YOUR-SERVICE with the actual Render website address shown in your browser."
+            }
+            require(renderUrl.trim().startsWith("https://")) { "The Render Cloud URL must start with https://" }
+            require(enrollmentCode.isNotBlank()) { "Enter an enrollment code from the admin website." }
+            renderCloudUrl = renderUrl
+            deviceName = requestedName
+            val payload = gson.toJson(mapOf(
+                "code" to enrollmentCode.trim(),
+                "hardwareId" to deviceId,
+                "deviceName" to requestedName.trim()
+            ))
+            val request = Request.Builder()
+                .url("$renderCloudUrl/sync/v1/enroll")
+                .header("Content-Type", "application/json")
+                .post(payload.toRequestBody(jsonMediaType))
+                .build()
+            val responseJson = client.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val message = runCatching { gson.fromJson(body, Map::class.java)["error"]?.toString() }.getOrNull()
+                    throw Exception(message ?: "Enrollment failed: HTTP ${response.code}")
+                }
+                body
+            }
+            val enrollment = runCatching { gson.fromJson(responseJson, RenderEnrollmentResponse::class.java) }.getOrNull()
+            requireNotNull(enrollment) { "Render returned an empty or invalid enrollment response. Verify the URL and deploy the latest backend." }
+            val token = enrollment.token
+            val enrolledDevice = enrollment.device
+            require(!token.isNullOrBlank() && enrolledDevice != null) {
+                "Render did not return a device token. Verify the database migration and create a fresh enrollment code."
+            }
+            deviceToken = token
+            enrolledRole = enrolledDevice.role
+            prefs.edit().putString("branch_id", enrolledDevice.branchId).remove("key").apply()
+            lastSyncStatus = "Enrolled as ${deviceRoleLabel}"
+            if (enrolledDevice.role == "manager") claimManagerAuthority().getOrThrow() else syncNowInternal()
+        }
     }
 
     fun clearOperationalSyncState() {
@@ -283,25 +358,30 @@ class SupabaseSyncManager(
 
     fun startSyncLoop(scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
+            var consecutiveFailures = 0
             while (true) {
                 if (isConfigured()) {
                     try {
                         syncNowInternal()
+                        consecutiveFailures = 0
                     } catch (e: Exception) {
+                        consecutiveFailures++
                         Log.e(TAG, "Sync loop error", e)
                         lastSyncStatus = "Sync failed: ${e.localizedMessage}"
                     }
                 } else {
                     lastSyncStatus = "Not configured"
                 }
-                delay(SYNC_POLL_INTERVAL_MS) // Poll every 2 seconds for near real-time multi-device sync.
+                val baseDelay = if (consecutiveFailures == 0) SYNC_POLL_INTERVAL_MS
+                    else min(MAX_RETRY_INTERVAL_MS, SYNC_POLL_INTERVAL_MS * (1L shl min(consecutiveFailures, 4)))
+                delay(baseDelay + if (consecutiveFailures > 0) Random.nextLong(250L, 1250L) else 0L)
             }
         }
     }
 
     suspend fun syncNow(): Result<Unit> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
-            return@withContext Result.failure(Exception("Supabase is not configured"))
+            return@withContext Result.failure(Exception("Render Cloud is not configured"))
         }
         try {
             syncNowInternal()
@@ -313,7 +393,7 @@ class SupabaseSyncManager(
     }
 
     suspend fun claimManagerAuthority(): Result<Unit> = withContext(Dispatchers.IO) {
-        if (!isConfigured()) return@withContext Result.failure(Exception("Supabase is not configured"))
+        if (!isConfigured()) return@withContext Result.failure(Exception("Render Cloud is not configured"))
         runCatching {
             syncMutex.withLock {
                 val existing = refreshAuthority()
@@ -349,6 +429,7 @@ class SupabaseSyncManager(
             Log.d(TAG, "Sync starting. Device ID: $deviceId")
 
             try {
+                refreshChangeCursor()
                 refreshAuthority()
                 // 1. Delete tombstones must win before normal catalog upload/download.
                 var tombstoneSyncReady = true
@@ -410,15 +491,15 @@ class SupabaseSyncManager(
 
                 lastSyncTime = System.currentTimeMillis()
                 lastSyncStatus = when {
-                    !orderAddOnSyncReady -> "Sync partial: run Supabase schema repair for order add-ons"
-                    !tombstoneSyncReady -> "Sync successful; local deletes held until Supabase repair runs"
+                    !orderAddOnSyncReady -> "Sync partial: deploy the Render migration for order add-ons"
+                    !tombstoneSyncReady -> "Sync successful; local deletes held until the Render migration runs"
                     managerDeviceId.isBlank() -> "Choose a Manager Tablet in Sync Settings"
                     else -> "Sync successful"
                 }
                 Log.d(TAG, "Sync completed successfully")
             } catch (e: Exception) {
                 lastSyncStatus = if (isAuthoritySchemaError(e)) {
-                    "Supabase schema update required"
+                    "Render database migration required"
                 } else {
                     "Sync failed: ${e.localizedMessage}"
                 }
@@ -430,21 +511,28 @@ class SupabaseSyncManager(
         }
     }
 
-    // Helper for Supabase HTTP requests
+    // HTTP compatibility layer retained only so existing Room synchronization code can migrate safely.
     private fun makeRequest(
         path: String,
         method: String,
         jsonPayload: String? = null,
         prefer: String = "resolution=merge-duplicates"
     ): String {
-        val url = "$supabaseUrl/rest/v1/$path"
+        if (isEnrolled && method == "POST" && !path.startsWith("rpc/") && !path.startsWith("inventory_balance")) {
+            return pushVersioned(path.substringBefore('?'), jsonPayload ?: "[]")
+        }
+        val url = when {
+            isEnrolled && method == "GET" -> "$renderCloudUrl/sync/v1/records/$path"
+            isEnrolled && path.startsWith("rpc/") -> "$renderCloudUrl/sync/v1/$path"
+            else -> "$renderCloudUrl/rest/v1/$path"
+        }
+        val credential = deviceToken.ifBlank { supabaseKey }
         val requestBuilder = Request.Builder()
             .url(url)
-            .header("apikey", supabaseKey)
             .header("Content-Type", "application/json")
             .header("Prefer", prefer)
 
-        requestBuilder.header("Authorization", "Bearer $supabaseKey")
+        requestBuilder.header("Authorization", "Bearer $credential")
 
         if (jsonPayload != null) {
             val body = jsonPayload.toRequestBody(jsonMediaType)
@@ -464,12 +552,64 @@ class SupabaseSyncManager(
     }
 
     private fun rpcRequest(function: String, payload: Map<String, Any?> = emptyMap()): String =
-        makeRequest("rpc/$function", "POST", gson.toJson(payload), prefer = "return=representation")
+        if (isEnrolled && function == "apply_inventory_event") {
+            pushOperations(listOf(mapOf(
+                "mutationId" to (payload["p_event_id"] ?: UUID.randomUUID().toString()),
+                "type" to "inventory_event",
+                "data" to payload
+            )))
+        } else makeRequest("rpc/$function", "POST", gson.toJson(payload), prefer = "return=representation")
+
+    private fun pushVersioned(entity: String, jsonPayload: String): String {
+        val element = gson.fromJson(jsonPayload, com.google.gson.JsonElement::class.java)
+        val rows: List<Map<String, Any?>> = if (element.isJsonArray) {
+            gson.fromJson(element, object : TypeToken<List<Map<String, Any?>>>() {}.type)
+        } else listOf(gson.fromJson(element, object : TypeToken<Map<String, Any?>>() {}.type))
+        var lastResponse = "{}"
+        rows.chunked(100).forEach { chunk ->
+            val operations = chunk.map { row ->
+                val canonical = gson.toJson(row)
+                val mutationId = MessageDigest.getInstance("SHA-256")
+                    .digest("$entity:$canonical".toByteArray())
+                    .joinToString("") { "%02x".format(it) }
+                if (entity == "sync_tombstone") mapOf("mutationId" to mutationId, "type" to "tombstone", "data" to row)
+                else mapOf("mutationId" to mutationId, "type" to "upsert", "entity" to entity, "data" to row)
+            }
+            lastResponse = pushOperations(operations)
+        }
+        return lastResponse
+    }
+
+    private fun pushOperations(operations: List<Map<String, Any?>>): String {
+        val request = Request.Builder().url("$renderCloudUrl/sync/v1/push")
+            .header("Authorization", "Bearer $deviceToken")
+            .header("Content-Type", "application/json")
+            .post(gson.toJson(mapOf("operations" to operations)).toRequestBody(jsonMediaType)).build()
+        return client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw Exception("Render push failed: HTTP ${response.code}: $body")
+            body
+        }
+    }
+
+    private fun refreshChangeCursor() {
+        if (!isEnrolled) return
+        val cursor = prefs.getLong("render_sync_cursor", 0L)
+        val request = Request.Builder().url("$renderCloudUrl/sync/v1/changes?cursor=$cursor")
+            .header("Authorization", "Bearer $deviceToken").get().build()
+        client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw Exception("Render change check failed: HTTP ${response.code}: $body")
+            val parsed = gson.fromJson(body, Map::class.java)
+            val next = (parsed["nextCursor"] as? Number)?.toLong() ?: cursor
+            prefs.edit().putLong("render_sync_cursor", next).apply()
+        }
+    }
 
     suspend fun getPromotionConfig(): Result<PromotionConfig> = withContext(Dispatchers.IO) {
         runCatching {
             gson.fromJson(rpcRequest("get_promotion_config"), PromotionConfig::class.java)
-                ?: PromotionConfig(available = false, message = "Promotion is not installed in Supabase.")
+                ?: PromotionConfig(available = false, message = "Promotion is not installed on Render.")
         }.recoverCatching { error ->
             val details = error.message.orEmpty()
             if (details.contains("PGRST202", ignoreCase = true) ||
@@ -478,7 +618,7 @@ class SupabaseSyncManager(
             ) {
                 PromotionConfig(
                     available = false,
-                    message = "Promotion backend is not installed in this Supabase project. Run the complete tools/supabase_schema_repair.sql file in this project's SQL Editor, then tap Retry."
+                    message = "Promotion support is not installed on this Render service. Deploy the current database migrations, then tap Retry."
                 )
             } else {
                 throw error
@@ -521,13 +661,13 @@ class SupabaseSyncManager(
     }
 
     /**
-     * Uploads only the records required for Supabase to determine this order's
+     * Uploads only the records required for Render Cloud to determine this order's
      * promotion result. This intentionally stays separate from the full sync
      * mutex so receipt preparation is not delayed by catalog or history sync.
      */
     suspend fun syncPromotionOrder(orderId: String): Result<Unit> = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
-            return@withContext Result.failure(Exception("Supabase is not configured"))
+            return@withContext Result.failure(Exception("Render Cloud is not configured"))
         }
         runCatching {
             promotionSyncMutex.withLock {
@@ -538,7 +678,7 @@ class SupabaseSyncManager(
                     ?: throw IllegalArgumentException("Shift not found for order: $orderId")
 
                 // A locally-owned shift must exist before its order is uploaded.
-                // Mapped remote shifts already exist in Supabase under their source ID.
+                // Mapped remote shifts already exist in Render PostgreSQL under their source ID.
                 if (source.first == deviceId) {
                     makeRequest(
                         "shift?on_conflict=device_id,id",
@@ -710,7 +850,9 @@ class SupabaseSyncManager(
     )
 
     val branchId: String
-        get() = UUID.nameUUIDFromBytes("coffee-pos:$supabaseUrl:default-branch".toByteArray()).toString()
+        get() = prefs.getString("branch_id", "").orEmpty().ifBlank {
+            UUID.nameUUIDFromBytes("coffee-pos:$renderCloudUrl:default-branch".toByteArray()).toString()
+        }
 
     private fun isAuthoritySchemaError(error: Exception): Boolean {
         val message = error.message.orEmpty()
@@ -1694,7 +1836,8 @@ class SupabaseSyncManager(
     }
 
     private companion object {
-        const val SYNC_POLL_INTERVAL_MS = 2000L            // How often the sync loop polls Supabase (ms)
+        const val SYNC_POLL_INTERVAL_MS = 5000L
+        const val MAX_RETRY_INTERVAL_MS = 60_000L
         const val RECENT_TRANSACTION_LOOKBACK_MS = 48L * 60L * 60L * 1000L
     }
 }

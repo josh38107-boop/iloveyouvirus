@@ -301,7 +301,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         val state = _uiState.value
         val message = when {
             !state.isManager -> "Manager PIN required to edit $area."
-            !container.supabaseSyncManager.isConfigured() -> "Configure Supabase and designate this device before editing $area."
+            !container.supabaseSyncManager.isConfigured() -> "Configure Render Cloud and enroll this device before editing $area."
             !container.supabaseSyncManager.isManagerTablet -> "Only the designated Manager Tablet can edit $area."
             else -> return true
         }
@@ -2131,7 +2131,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             }
             if (!container.supabaseSyncManager.isConfigured()) {
                 _uiState.update {
-                    it.copy(statusMessage = "Configure Supabase and designate this device before removing cash.")
+                    it.copy(statusMessage = "Configure Render Cloud and enroll this device before removing cash.")
                 }
                 return@launch
             }
@@ -3854,7 +3854,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 it.copy(
                     promotionConfig = PromotionConfig(available = false),
                     promotionBusy = false,
-                    promotionError = "Connect this POS to Supabase before configuring the promotion."
+                    promotionError = "Connect this POS to Render Cloud before configuring the promotion."
                 )
             }
             return
@@ -4168,12 +4168,16 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
 
     val supabaseSyncManager: com.kape.coffeepos.data.SupabaseSyncManager get() = container.supabaseSyncManager
 
-    fun updateSupabaseConfig(url: String, key: String, deviceName: String) {
-        container.supabaseSyncManager.supabaseUrl = url
-        container.supabaseSyncManager.supabaseKey = key
+    fun updateRenderCloudConfig(url: String, enrollmentCode: String, deviceName: String) {
+        container.supabaseSyncManager.renderCloudUrl = url
         container.supabaseSyncManager.deviceName = deviceName
         viewModelScope.launch {
-            container.supabaseSyncManager.syncNow()
+            val result = if (container.supabaseSyncManager.isEnrolled) {
+                container.supabaseSyncManager.syncNow()
+            } else {
+                container.supabaseSyncManager.enroll(url, enrollmentCode, deviceName)
+            }
+            _uiState.update { state -> state.copy(statusMessage = result.exceptionOrNull()?.message ?: "Render Cloud synchronized.") }
         }
     }
 
