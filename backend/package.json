@@ -9,6 +9,7 @@
     "migrate": "node migrate.js",
     "audit:data": "node audit-data.js",
     "check:sync-schema": "node check-sync-schema.js",
+    "cleanup:legacy-menu": "node cleanup-legacy-menu.js --execute",
     "test": "node --test"
   },
   "dependencies": {

@@ -1,0 +1,850 @@
+{
+  "exportedAt": "2026-07-22T15:38:01.924Z",
+  "branchId": "main",
+  "targetCategories": [
+    "espresso",
+    "signature",
+    "cold",
+    "tea-non-coffee",
+    "pastry",
+    "food",
+    "combos",
+    "a"
+  ],
+  "counts": {
+    "categories": 8,
+    "items": 35,
+    "recipes": 4,
+    "modifierLinks": 97,
+    "categoryTombstones": 8
+  },
+  "categories": [
+    {
+      "id": "a",
+      "name": "a",
+      "sort_order": 1
+    },
+    {
+      "id": "cold",
+      "name": "Cold Drinks",
+      "sort_order": 3
+    },
+    {
+      "id": "combos",
+      "name": "Combos",
+      "sort_order": 7
+    },
+    {
+      "id": "espresso",
+      "name": "Espresso",
+      "sort_order": 1
+    },
+    {
+      "id": "food",
+      "name": "Food",
+      "sort_order": 6
+    },
+    {
+      "id": "pastry",
+      "name": "Pastries",
+      "sort_order": 5
+    },
+    {
+      "id": "signature",
+      "name": "Signature Coffee",
+      "sort_order": 2
+    },
+    {
+      "id": "tea-non-coffee",
+      "name": "Tea & Non-Coffee",
+      "sort_order": 4
+    }
+  ],
+  "items": [
+    {
+      "id": "americano",
+      "category_id": "espresso",
+      "name": "Americano",
+      "description": "Espresso topped with hot water",
+      "base_price_cents": 375,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "banana-bread",
+      "category_id": "pastry",
+      "name": "Banana Bread",
+      "description": "Moist banana loaf slice",
+      "base_price_cents": 325,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "cappuccino",
+      "category_id": "espresso",
+      "name": "Cappuccino",
+      "description": "Espresso, foam, and steamed milk",
+      "base_price_cents": 500,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "chai",
+      "category_id": "tea-non-coffee",
+      "name": "Chai Latte",
+      "description": "Spiced black tea with steamed milk",
+      "base_price_cents": 500,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "chocolate-croissant",
+      "category_id": "pastry",
+      "name": "Chocolate Croissant",
+      "description": "Buttery pastry filled with chocolate",
+      "base_price_cents": 475,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "cinnamon-roll",
+      "category_id": "pastry",
+      "name": "Cinnamon Roll",
+      "description": "Soft roll with cinnamon glaze",
+      "base_price_cents": 425,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "coffee-croissant-combo",
+      "category_id": "combos",
+      "name": "Coffee + Croissant",
+      "description": "House drip coffee with a butter croissant",
+      "base_price_cents": 695,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "coffee-frappe",
+      "category_id": "cold",
+      "name": "Coffee Frappe",
+      "description": "Blended coffee with milk and frappe base",
+      "base_price_cents": 675,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "coldbrew",
+      "category_id": "cold",
+      "name": "Cold Brew",
+      "description": "Slow-steeped coffee over ice",
+      "base_price_cents": 475,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "cookies",
+      "category_id": "pastry",
+      "name": "Cookies",
+      "description": "Pair of house-baked cookies",
+      "base_price_cents": 275,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "croissant",
+      "category_id": "pastry",
+      "name": "Butter Croissant",
+      "description": "Flaky baked pastry",
+      "base_price_cents": 425,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "drip",
+      "category_id": "espresso",
+      "name": "House Drip",
+      "description": "Rotating single-origin drip coffee",
+      "base_price_cents": 325,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "eyy-326689",
+      "category_id": "pastry",
+      "name": "eyy",
+      "description": "Custom menu item",
+      "base_price_cents": 1000,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "gcash-2d7577",
+      "category_id": "espresso",
+      "name": "gcash",
+      "description": "Custom menu item",
+      "base_price_cents": 20000,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "gcash-992395",
+      "category_id": "a",
+      "name": "gcash",
+      "description": "Custom menu item",
+      "base_price_cents": 20000,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "ham-cheese-sandwich",
+      "category_id": "food",
+      "name": "Ham & Cheese Sandwich",
+      "description": "Toasted sandwich with ham and cheese",
+      "base_price_cents": 595,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "hey-cash-c2d542",
+      "category_id": "espresso",
+      "name": "hey cash",
+      "description": "Custom menu item",
+      "base_price_cents": 15000,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "hey-ecda46",
+      "category_id": "a",
+      "name": "hey",
+      "description": "Custom menu item",
+      "base_price_cents": 15000,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "hot-chocolate",
+      "category_id": "tea-non-coffee",
+      "name": "Hot Chocolate",
+      "description": "Rich chocolate steamed with milk",
+      "base_price_cents": 475,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "iced-americano",
+      "category_id": "cold",
+      "name": "Iced Americano",
+      "description": "Espresso chilled over ice and water",
+      "base_price_cents": 395,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "iced-latte",
+      "category_id": "cold",
+      "name": "Iced Latte",
+      "description": "Espresso, cold milk, and ice",
+      "base_price_cents": 545,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "iced-spanish-latte",
+      "category_id": "cold",
+      "name": "Iced Spanish Latte",
+      "description": "Sweet cream latte served over ice",
+      "base_price_cents": 625,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "latte",
+      "category_id": "espresso",
+      "name": "Cafe Latte",
+      "description": "Espresso with steamed milk",
+      "base_price_cents": 525,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "lemon-iced-tea",
+      "category_id": "tea-non-coffee",
+      "name": "Lemon Iced Tea",
+      "description": "Bright black tea with lemon over ice",
+      "base_price_cents": 395,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "matcha",
+      "category_id": "tea-non-coffee",
+      "name": "Matcha Latte",
+      "description": "Ceremonial matcha with milk",
+      "base_price_cents": 550,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "matcha-frappe",
+      "category_id": "cold",
+      "name": "Matcha Frappe",
+      "description": "Blended matcha with milk and frappe base",
+      "base_price_cents": 695,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "mocha",
+      "category_id": "signature",
+      "name": "Mocha",
+      "description": "Espresso, chocolate, and steamed milk",
+      "base_price_cents": 595,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "morning-set",
+      "category_id": "combos",
+      "name": "Morning Set",
+      "description": "Cafe latte with banana bread",
+      "base_price_cents": 795,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "muffin",
+      "category_id": "pastry",
+      "name": "Blueberry Muffin",
+      "description": "Baked daily",
+      "base_price_cents": 395,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "salted-caramel-latte",
+      "category_id": "signature",
+      "name": "Salted Caramel Latte",
+      "description": "Espresso, milk, caramel, and sea salt",
+      "base_price_cents": 625,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "spanish-latte",
+      "category_id": "signature",
+      "name": "Spanish Latte",
+      "description": "Espresso with milk and sweet condensed cream",
+      "base_price_cents": 595,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "strawberry-milk",
+      "category_id": "tea-non-coffee",
+      "name": "Strawberry Milk",
+      "description": "Cold milk with strawberry blend",
+      "base_price_cents": 445,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "student-snack-combo",
+      "category_id": "combos",
+      "name": "Student Snack Combo",
+      "description": "Iced latte with cookies",
+      "base_price_cents": 725,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "vanilla-milkshake",
+      "category_id": "tea-non-coffee",
+      "name": "Vanilla Milkshake",
+      "description": "Creamy vanilla shake",
+      "base_price_cents": 525,
+      "active": true,
+      "complementary_exclusions": ""
+    },
+    {
+      "id": "white-chocolate-mocha",
+      "category_id": "signature",
+      "name": "White Chocolate Mocha",
+      "description": "Espresso, white chocolate, and milk",
+      "base_price_cents": 625,
+      "active": true,
+      "complementary_exclusions": ""
+    }
+  ],
+  "recipes": [
+    {
+      "item_id": "gcash-992395",
+      "ingredient_id": "cups-16",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "gcash-992395",
+      "ingredient_id": "jhonny",
+      "quantity_used": 10
+    },
+    {
+      "item_id": "hey-ecda46",
+      "ingredient_id": "cup22",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "hey-ecda46",
+      "ingredient_id": "qpal",
+      "quantity_used": 100
+    }
+  ],
+  "menuItemModifierGroups": [
+    {
+      "item_id": "americano",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "americano",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "americano",
+      "group_id": "size"
+    },
+    {
+      "item_id": "americano",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "americano",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "cappuccino",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "cappuccino",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "cappuccino",
+      "group_id": "size"
+    },
+    {
+      "item_id": "cappuccino",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "cappuccino",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "chai",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "chai",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "chai",
+      "group_id": "size"
+    },
+    {
+      "item_id": "chai",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "chai",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "coffee-frappe",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "coffee-frappe",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "coffee-frappe",
+      "group_id": "size"
+    },
+    {
+      "item_id": "coffee-frappe",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "coffee-frappe",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "coldbrew",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "coldbrew",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "coldbrew",
+      "group_id": "size"
+    },
+    {
+      "item_id": "coldbrew",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "coldbrew",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "gcash-992395",
+      "group_id": "22oz"
+    },
+    {
+      "item_id": "hey-ecda46",
+      "group_id": "22oz"
+    },
+    {
+      "item_id": "hot-chocolate",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "hot-chocolate",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "hot-chocolate",
+      "group_id": "size"
+    },
+    {
+      "item_id": "hot-chocolate",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "hot-chocolate",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "iced-americano",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "iced-americano",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "iced-americano",
+      "group_id": "size"
+    },
+    {
+      "item_id": "iced-americano",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "iced-americano",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "iced-latte",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "iced-latte",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "iced-latte",
+      "group_id": "size"
+    },
+    {
+      "item_id": "iced-latte",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "iced-latte",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "group_id": "size"
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "latte",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "latte",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "latte",
+      "group_id": "size"
+    },
+    {
+      "item_id": "latte",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "latte",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "lemon-iced-tea",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "lemon-iced-tea",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "lemon-iced-tea",
+      "group_id": "size"
+    },
+    {
+      "item_id": "lemon-iced-tea",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "lemon-iced-tea",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "matcha",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "matcha",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "matcha",
+      "group_id": "size"
+    },
+    {
+      "item_id": "matcha",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "matcha",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "matcha-frappe",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "matcha-frappe",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "matcha-frappe",
+      "group_id": "size"
+    },
+    {
+      "item_id": "matcha-frappe",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "matcha-frappe",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "mocha",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "mocha",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "mocha",
+      "group_id": "size"
+    },
+    {
+      "item_id": "mocha",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "mocha",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "group_id": "size"
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "spanish-latte",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "spanish-latte",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "spanish-latte",
+      "group_id": "size"
+    },
+    {
+      "item_id": "spanish-latte",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "spanish-latte",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "strawberry-milk",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "strawberry-milk",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "strawberry-milk",
+      "group_id": "size"
+    },
+    {
+      "item_id": "strawberry-milk",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "strawberry-milk",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "group_id": "size"
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "group_id": "temp"
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "group_id": "milk"
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "group_id": "shots"
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "group_id": "size"
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "group_id": "syrup"
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "group_id": "temp"
+    }
+  ],
+  "categoryTombstones": [
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "a",
+      "deleted_at": "1784345631702",
+      "deleted_by_device": "3998a58d-400d-4e36-95af-c84c87c44191"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "cold",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "combos",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "espresso",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "food",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "pastry",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "signature",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "menu_category",
+      "entity_id": "tea-non-coffee",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    }
+  ]
+}

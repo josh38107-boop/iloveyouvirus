@@ -5,6 +5,9 @@ const path = require('path');
 const db = require('./db');
 const rpc = require('./rpc');
 const { createCloud } = require('./cloud');
+const { createInventoryService } = require('./inventory');
+const { createMenuService } = require('./menu');
+const { createEmployeeService } = require('./employees');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -13,6 +16,9 @@ process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'KapeAdmin2024';
 const app = express();
 const PORT = process.env.PORT || 3000;
 const cloud = createCloud(db);
+const inventory = createInventoryService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
+const menu = createMenuService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
+const employees = createEmployeeService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 
 // ─── Allowed tables (whitelist for security) ─────────────────────────────────
 const ALLOWED_TABLES = new Set([
@@ -209,6 +215,7 @@ app.all('/rest/v1/:table', authenticate, async (req, res) => {
 
 app.all('/admin/data/:table', adminAuthenticate, async (req, res) => {
   const { table } = req.params;
+  if (table === 'employee') return res.status(404).json({ error: 'Use the dedicated employee management API.' });
   if (!ALLOWED_TABLES.has(table)) return res.status(404).json({ error: `Table '${table}' not found` });
   switch (req.method) {
     case 'GET': return handleGet(req, res, table);
@@ -393,29 +400,96 @@ app.get('/admin/orders', adminAuthenticate, async (req, res) => {
 // GET /admin/inventory — stock levels with low-stock flag
 app.get('/admin/inventory', adminAuthenticate, async (req, res) => {
   try {
-    const result = await db.query(`
-      SELECT id, name, unit, quantity_on_hand,
-             low_stock_threshold,
-             (quantity_on_hand <= low_stock_threshold) as low_stock
-      FROM ingredient
-      ORDER BY name
-    `);
-    res.json(result.rows);
+    res.json(await inventory.list());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
   }
+});
+
+app.post('/admin/inventory', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await inventory.create(req.body)); }
+  catch (err) { res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/inventory/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await inventory.update(req.params.id, req.body)); }
+  catch (err) { res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/inventory/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await inventory.remove(req.params.id)); }
+  catch (err) { res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.get('/admin/menu', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.list()); }
+  catch (err) { console.error('GET /admin/menu:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/menu/categories', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await menu.createCategory(req.body)); }
+  catch (err) { console.error('POST /admin/menu/categories:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/menu/categories/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.updateCategory(req.params.id, req.body)); }
+  catch (err) { console.error('PUT /admin/menu/categories/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/menu/categories/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.deleteCategory(req.params.id)); }
+  catch (err) { console.error('DELETE /admin/menu/categories/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/menu/items', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await menu.createItem(req.body)); }
+  catch (err) { console.error('POST /admin/menu/items:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/menu/items/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.updateItem(req.params.id, req.body)); }
+  catch (err) { console.error('PUT /admin/menu/items/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/menu/items/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.deleteItem(req.params.id)); }
+  catch (err) { console.error('DELETE /admin/menu/items/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.get('/admin/employees', adminAuthenticate, async (req, res) => {
+  try { res.json(await employees.list()); }
+  catch (err) { console.error('GET /admin/employees:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/employees', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await employees.create(req.body)); }
+  catch (err) { console.error('POST /admin/employees:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/employees/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await employees.update(req.params.id, req.body)); }
+  catch (err) { console.error('PUT /admin/employees/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/employees/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await employees.deactivate(req.params.id)); }
+  catch (err) { console.error('DELETE /admin/employees/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
 });
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
 app.get('/ready', async (req, res) => {
   try {
-    const schema = await db.query(`SELECT
-      to_regclass('public.sync_device') AS sync_device,
-      to_regclass('public.sync_enrollment') AS sync_enrollment,
-      to_regclass('public.sync_mutation') AS sync_mutation,
-      to_regclass('public.sync_change') AS sync_change`);
-    if (Object.values(schema.rows[0]).some(value => value == null)) {
+    const requiredTables = ['sync_device', 'sync_enrollment', 'sync_mutation', 'sync_change',
+      'sync_device_authority', 'sync_tombstone', 'inventory_balance'];
+    const schema = await db.query(`SELECT table_name, column_name, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = ANY($1::text[])`, [requiredTables]);
+    const tables = new Set(schema.rows.map(row => row.table_name));
+    const invalidBranchTypes = schema.rows.some(row =>
+      ['sync_device_authority', 'sync_tombstone', 'inventory_balance'].includes(row.table_name) &&
+      row.column_name === 'branch_id' && row.data_type !== 'text');
+    if (requiredTables.some(table => !tables.has(table)) || invalidBranchTypes) {
       return res.status(503).json({ status: 'migration_required', command: 'cd backend && npm run migrate' });
     }
     res.json({ status: 'ready', timestamp: Date.now() });
@@ -429,6 +503,9 @@ app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
   if (err.code === '42P01') {
     return res.status(503).json({ error: 'Render database migration required', command: 'cd backend && npm run migrate' });
+  }
+  if (err.code === '22P02' && /uuid/i.test(err.message || '')) {
+    return res.status(503).json({ error: 'Render branch schema migration required', command: 'cd backend && npm run migrate' });
   }
   res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
 });

@@ -72,6 +72,20 @@ internal fun shouldApplyRemoteOrderTypeCorrection(
     remoteOrderType: String
 ): Boolean = isDownloadedRemoteOrder && localOrderType != remoteOrderType
 
+internal fun remoteLong(value: Any?, field: String): Long = when (value) {
+    is Number -> value.toLong()
+    is String -> value.toLongOrNull()
+    else -> null
+} ?: throw IllegalArgumentException("Render returned a non-numeric value for '$field': $value")
+
+internal fun remoteLongOrNull(value: Any?, field: String): Long? =
+    if (value == null) null else remoteLong(value, field)
+
+internal fun remoteInt(value: Any?, field: String): Int = remoteLong(value, field).toInt()
+
+internal fun remoteIntOrNull(value: Any?, field: String): Int? =
+    remoteLongOrNull(value, field)?.toInt()
+
 internal fun orderInventoryAddOnPayload(row: OrderInventoryAddOn): Map<String, Any> =
     mutableMapOf<String, Any>(
         "id" to row.id,
@@ -1389,14 +1403,14 @@ class SupabaseSyncManager(
 
         for (remoteShift in remoteShifts) {
             val rDeviceId = remoteShift["device_id"] as String
-            val rId = (remoteShift["id"] as Double).toLong()
+            val rId = remoteLong(remoteShift["id"], "shift.id")
             val employeeId = remoteShift["employee_id"] as String
-            val openedAt = (remoteShift["opened_at"] as Double).toLong()
-            val closedAt = (remoteShift["closed_at"] as? Double)?.toLong()
-            val startingCashCents = (remoteShift["starting_cash_cents"] as Double).toInt()
-            val endingCashCents = (remoteShift["ending_cash_cents"] as? Double)?.toInt()
-            val cashAddedCents = (remoteShift["cash_added_cents"] as Double).toInt()
-            val cashRemovedCents = (remoteShift["cash_removed_cents"] as Double).toInt()
+            val openedAt = remoteLong(remoteShift["opened_at"], "shift.opened_at")
+            val closedAt = remoteLongOrNull(remoteShift["closed_at"], "shift.closed_at")
+            val startingCashCents = remoteInt(remoteShift["starting_cash_cents"], "shift.starting_cash_cents")
+            val endingCashCents = remoteIntOrNull(remoteShift["ending_cash_cents"], "shift.ending_cash_cents")
+            val cashAddedCents = remoteInt(remoteShift["cash_added_cents"], "shift.cash_added_cents")
+            val cashRemovedCents = remoteInt(remoteShift["cash_removed_cents"], "shift.cash_removed_cents")
             val remoteShiftRow = Shift(
                 id = rId,
                 employeeId = employeeId,
@@ -1677,15 +1691,15 @@ class SupabaseSyncManager(
             val oId = rOrder["id"] as String
             val status = rOrder["status"] as String
             val employeeId = rOrder["employee_id"] as String
-            val rShiftId = (rOrder["shift_id"] as Double).toLong()
+            val rShiftId = remoteLong(rOrder["shift_id"], "pos_order.shift_id")
             val rShiftDeviceId = rOrder["shift_device_id"] as String
-            val subtotalCents = (rOrder["subtotal_cents"] as Double).toInt()
-            val discountCents = (rOrder["discount_cents"] as Double).toInt()
-            val taxCents = (rOrder["tax_cents"] as Double).toInt()
-            val tipCents = (rOrder["tip_cents"] as Double).toInt()
-            val totalCents = (rOrder["total_cents"] as Double).toInt()
-            val createdAt = (rOrder["created_at"] as Double).toLong()
-            val paidAt = (rOrder["paid_at"] as? Double)?.toLong()
+            val subtotalCents = remoteInt(rOrder["subtotal_cents"], "pos_order.subtotal_cents")
+            val discountCents = remoteInt(rOrder["discount_cents"], "pos_order.discount_cents")
+            val taxCents = remoteInt(rOrder["tax_cents"], "pos_order.tax_cents")
+            val tipCents = remoteInt(rOrder["tip_cents"], "pos_order.tip_cents")
+            val totalCents = remoteInt(rOrder["total_cents"], "pos_order.total_cents")
+            val createdAt = remoteLong(rOrder["created_at"], "pos_order.created_at")
+            val paidAt = remoteLongOrNull(rOrder["paid_at"], "pos_order.paid_at")
             val voidReason = rOrder["void_reason"] as? String
             val customerName = rOrder["customer_name"] as? String
             val tableNumber = rOrder["table_number"] as? String
@@ -1771,12 +1785,12 @@ class SupabaseSyncManager(
                 orderId = orderId,
                 itemId = rl["item_id"] as String,
                 name = rl["name"] as String,
-                quantity = (rl["quantity"] as Double).toInt(),
-                unitPriceCents = (rl["unit_price_cents"] as Double).toInt(),
+                quantity = remoteInt(rl["quantity"], "order_line.quantity"),
+                unitPriceCents = remoteInt(rl["unit_price_cents"], "order_line.unit_price_cents"),
                 modifiers = rl["modifiers"] as String,
                 notes = rl["notes"] as String,
                 discountCategory = rl["discount_category"] as? String,
-                discountCents = (rl["discount_cents"] as? Double)?.toInt() ?: 0
+                discountCents = remoteIntOrNull(rl["discount_cents"], "order_line.discount_cents") ?: 0
             )
         }.distinctBy { line ->
             listOf(
@@ -1806,10 +1820,10 @@ class SupabaseSyncManager(
             Payment(
                 orderId = orderId,
                 method = rp["method"] as String,
-                amountCents = (rp["amount_cents"] as Double).toInt(),
-                amountTenderedCents = (rp["amount_tendered_cents"] as Double).toInt(),
-                changeCents = (rp["change_cents"] as Double).toInt(),
-                createdAt = (rp["created_at"] as Double).toLong(),
+                amountCents = remoteInt(rp["amount_cents"], "payment.amount_cents"),
+                amountTenderedCents = remoteInt(rp["amount_tendered_cents"], "payment.amount_tendered_cents"),
+                changeCents = remoteInt(rp["change_cents"], "payment.change_cents"),
+                createdAt = remoteLong(rp["created_at"], "payment.created_at"),
                 paymentCategory = (rp["payment_category"] as? String)
                     ?: PaymentCategories.fromLegacyMethod(rp["method"] as String)
             )

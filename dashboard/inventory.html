@@ -7,6 +7,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    .inventory-notice{display:none;margin-bottom:16px;padding:11px 14px;border-radius:9px;font-size:14px;font-weight:600}.inventory-notice.show{display:block}.inventory-notice.success{color:var(--success);background:rgba(45,138,94,.10);border:1px solid rgba(45,138,94,.25)}.inventory-notice.error{color:var(--danger);background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.25)}
+    .ingredient-modal{max-width:560px;max-height:min(760px,calc(100vh - 32px));overflow-y:auto}.ingredient-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form-row .ingredient-form-label{display:block;margin-bottom:6px;color:var(--text-muted);font-size:13px;font-weight:600;text-transform:none}.ingredient-modal .input{min-height:48px;width:100%;font-size:16px}
+    .unit-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 1px 8px;scrollbar-width:thin}.unit-chip{flex:0 0 auto;min-width:48px;min-height:44px;padding:7px 13px;border:1.5px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font:600 14px/1 'Outfit',sans-serif;cursor:pointer;transition:background .15s,border-color .15s,color .15s}.unit-chip:hover{border-color:var(--accent)}.unit-chip.selected{background:var(--accent-light);border-color:var(--accent);color:var(--accent2)}
+    .unit-chip:focus-visible,.inventory-action:focus-visible,.switch-control:focus-within{outline:3px solid var(--accent-light);outline-offset:2px}.switch-row{display:flex;align-items:center;gap:10px;min-height:48px;cursor:pointer;color:var(--text-muted);font-size:14px}.switch-control{position:relative;width:50px;height:30px;flex:0 0 auto}.switch-control input{position:absolute;opacity:0;width:1px;height:1px}.switch-track{position:absolute;inset:0;border-radius:999px;background:var(--border2);transition:background .18s}.switch-track::after{content:'';position:absolute;width:24px;height:24px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .18s}.switch-control input:checked + .switch-track{background:var(--black)}.switch-control input:checked + .switch-track::after{transform:translateX(20px)}
+    .form-error{min-height:20px;margin-top:4px;color:var(--danger);font-size:13px;font-weight:600}.inventory-actions{display:flex;gap:8px;flex-wrap:wrap}.inventory-action,.ingredient-modal .form-actions .btn,.delete-dialog .form-actions .btn{min-height:44px}.inventory-action{padding:7px 13px}.btn-delete-outline{background:transparent;color:var(--danger);border:1.5px solid var(--danger)}.btn-delete-outline:hover{background:rgba(192,57,43,.08)}.delete-dialog{max-width:430px}.delete-dialog p{color:var(--text-muted);line-height:1.55}.delete-dialog strong{color:var(--text)}.btn-danger-solid{background:var(--danger);color:#fff}.btn-danger-solid:hover{background:#9f2f24}.modal-close{min-width:44px;min-height:44px;border-radius:8px}
+    @media(max-width:600px){.modal-overlay{align-items:flex-end;padding:0}.ingredient-modal,.delete-dialog{max-width:none;max-height:calc(100dvh - 16px);border-radius:16px 16px 0 0;padding:20px}.ingredient-form-grid{grid-template-columns:1fr}.form-actions .btn{min-height:44px}}
+    @media(prefers-reduced-motion:reduce){.modal-overlay,.modal-card,.unit-chip,.switch-track,.switch-track::after{transition:none}}
+  </style>
 </head>
 <body>
 <div class="layout">
@@ -42,6 +51,7 @@
     </div>
 
     <div class="content fade-up">
+      <div id="inventoryNotice" class="inventory-notice" role="status" aria-live="polite"></div>
       <!-- Low stock alert -->
       <div id="lowStockAlert" style="display:none;margin-bottom:20px;" class="card">
         <div style="color:var(--warning);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
@@ -74,37 +84,49 @@
 </div>
 
 <!-- Edit / Add Modal -->
-<div class="modal-overlay" id="editModal">
-  <div class="modal-card">
+<div class="modal-overlay" id="editModal" aria-hidden="true">
+  <div class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-header">
       <div class="modal-title" id="modalTitle">Edit Ingredient</div>
-      <button class="modal-close" onclick="closeEditModal()">✕</button>
+      <button type="button" class="modal-close" onclick="closeEditModal()" aria-label="Close ingredient editor">&times;</button>
     </div>
     <form id="editForm" onsubmit="saveIngredient(event)">
       <input type="hidden" id="ingId"/>
       <div class="form-row">
-        <label>Ingredient Name</label>
-        <input type="text" class="input" id="ingName" required placeholder="e.g. Espresso Beans"/>
-      </div>
-      <div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div>
-          <label>Quantity On Hand</label>
-          <input type="number" step="0.01" class="input" id="ingQty" required placeholder="0.00"/>
-        </div>
-        <div>
-          <label>Unit</label>
-          <input type="text" class="input" id="ingUnit" required placeholder="e.g. g, ml, pcs, oz"/>
-        </div>
+        <label class="ingredient-form-label" for="ingName">Name</label>
+        <input type="text" class="input" id="ingName" required maxlength="120" autocomplete="off" placeholder="e.g. Espresso Beans"/>
       </div>
       <div class="form-row">
-        <label>Low Stock Threshold</label>
-        <input type="number" step="0.01" class="input" id="ingThreshold" required placeholder="0.00"/>
+        <label class="ingredient-form-label" for="ingUnit">Unit (e.g. oz, ea, ml)</label>
+        <input type="text" class="input" id="ingUnit" required maxlength="32" autocomplete="off" placeholder="pcs"/>
       </div>
+      <div class="unit-chips" id="unitChips" aria-label="Common units"></div>
+      <div class="form-row ingredient-form-grid">
+        <div>
+          <label class="ingredient-form-label" for="ingQty">Qty on Hand</label>
+          <input type="number" min="0" step="0.01" inputmode="decimal" class="input" id="ingQty" required placeholder="0"/>
+        </div>
+        <div>
+          <label class="ingredient-form-label" for="ingThreshold">Low-stock Alert</label>
+          <input type="number" min="0" step="0.01" inputmode="decimal" class="input" id="ingThreshold" required placeholder="0"/>
+        </div>
+      </div>
+      <label class="switch-row" for="ingTakeoutOnly"><span class="switch-control"><input type="checkbox" id="ingTakeoutOnly"/><span class="switch-track" aria-hidden="true"></span></span><span>Takeout Only (do not deduct for Dine-In)</span></label>
+      <div id="ingredientFormError" class="form-error" role="alert"></div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <button type="submit" class="btn btn-primary" id="saveIngredientButton">Save</button>
       </div>
     </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal" aria-hidden="true">
+  <div class="modal-card delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="deleteTitle" aria-describedby="deleteDescription">
+    <div class="modal-header"><div class="modal-title" id="deleteTitle">Delete Ingredient</div><button type="button" class="modal-close" onclick="closeDeleteModal()" aria-label="Close delete confirmation">&times;</button></div>
+    <p id="deleteDescription">Delete <strong id="deleteIngredientName"></strong>? This cannot be undone.</p>
+    <div id="deleteError" class="form-error" role="alert"></div>
+    <div class="form-actions"><button type="button" class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button><button type="button" class="btn btn-danger-solid" id="confirmDeleteButton" onclick="confirmDeleteIngredient()">Delete</button></div>
   </div>
 </div>
 
@@ -113,12 +135,64 @@
 <script src="js/inventory-export.js"></script>
 <script>
   requireAuth(); startClock();
+  const UNIT_SUGGESTIONS = ['oz','ml','g','kg','L','ea','pcs','tsp','tbsp','cup','pack','box','can','bottle'];
   let inventoryData = [];
+  let deleteIngredientId = null;
+  let activeModal = null;
+  let previousFocus = null;
+
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[char]);
+
+  function setNotice(message, type = 'success') {
+    const notice = document.getElementById('inventoryNotice');
+    notice.textContent = message;
+    notice.className = `inventory-notice show ${type}`;
+  }
+
+  function setModalOpen(modal, open, focusTarget = null) {
+    if (open) {
+      previousFocus = document.activeElement;
+      activeModal = modal;
+      modal.classList.add('active');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => (focusTarget || modal.querySelector('button,input'))?.focus(), 0);
+    } else {
+      modal.classList.remove('active');
+      modal.setAttribute('aria-hidden', 'true');
+      activeModal = null;
+      document.body.style.overflow = '';
+      previousFocus?.focus?.();
+    }
+  }
+
+  function updateUnitChips() {
+    const selected = document.getElementById('ingUnit').value.trim().toLowerCase();
+    document.querySelectorAll('.unit-chip').forEach(chip => {
+      const isSelected = chip.dataset.unit.toLowerCase() === selected;
+      chip.classList.toggle('selected', isSelected);
+      chip.setAttribute('aria-pressed', String(isSelected));
+    });
+  }
+
+  document.getElementById('unitChips').innerHTML = UNIT_SUGGESTIONS.map(unit =>
+    `<button type="button" class="unit-chip" data-unit="${unit}" aria-pressed="false">${unit}</button>`
+  ).join('');
+  document.getElementById('unitChips').addEventListener('click', event => {
+    const chip = event.target.closest('.unit-chip');
+    if (!chip) return;
+    document.getElementById('ingUnit').value = chip.dataset.unit;
+    updateUnitChips();
+  });
+  document.getElementById('ingUnit').addEventListener('input', updateUnitChips);
 
   async function loadInventory() {
     const el = document.getElementById('inventoryTable');
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
-    inventoryData = await api.getInventory();
+    try { inventoryData = await api.getInventory(); }
+    catch (error) { el.innerHTML = `<div class="empty-state"><p>${escapeHtml(error.message)}</p></div>`; return; }
     if (!inventoryData?.length) {
       el.innerHTML = '<div class="empty-state"><span class="icon">📦</span><p>No ingredients found</p></div>'; return;
     }
@@ -130,7 +204,7 @@
       alertEl.style.display = 'block';
       document.getElementById('lowStockCount').textContent = lowStock.length;
       document.getElementById('lowStockList').innerHTML = lowStock.map(i =>
-        `<span class="badge badge-warning">${i.name}: ${parseFloat(i.quantity_on_hand).toFixed(2)} ${i.unit}</span>`
+        `<span class="badge badge-warning">${escapeHtml(i.name)}: ${parseFloat(i.quantity_on_hand).toFixed(2)} ${escapeHtml(i.unit)}</span>`
       ).join('');
     } else {
       alertEl.style.display = 'none';
@@ -145,8 +219,8 @@
         const threshold = parseFloat(i.low_stock_threshold || 0);
         const pct = threshold > 0 ? Math.min((qty / threshold) * 100, 100) : 100;
         return `<tr>
-          <td style="font-weight:600;color:var(--black);">${i.name}</td>
-          <td style="color:var(--text-muted);">${i.unit}</td>
+          <td style="font-weight:600;color:var(--black);">${escapeHtml(i.name)}</td>
+          <td style="color:var(--text-muted);">${escapeHtml(i.unit)}</td>
           <td style="font-weight:700;color:${i.low_stock?'var(--danger)':'var(--success)'};">${qty.toFixed(2)}</td>
           <td>${threshold.toFixed(2)}</td>
           <td>
@@ -156,11 +230,16 @@
             </div>
           </td>
           <td>
-            <button class="btn btn-outline" style="font-size:12px;padding:4px 10px;" onclick="openEditModal('${i.id}')">✏️ Edit</button>
+            <div class="inventory-actions">
+              <button type="button" class="btn btn-outline inventory-action" data-action="edit" data-id="${escapeHtml(i.id)}">Edit</button>
+              <button type="button" class="btn btn-delete-outline inventory-action" data-action="delete" data-id="${escapeHtml(i.id)}">Delete</button>
+            </div>
           </td>
         </tr>`;
       }).join('')}
       </tbody></table></div>`;
+    el.querySelectorAll('[data-action="edit"]').forEach(button => button.addEventListener('click', () => openEditModal(button.dataset.id)));
+    el.querySelectorAll('[data-action="delete"]').forEach(button => button.addEventListener('click', () => openDeleteModal(button.dataset.id)));
   }
 
   // Modal open/close
@@ -175,38 +254,118 @@
       document.getElementById('ingQty').value = parseFloat(item.quantity_on_hand || 0);
       document.getElementById('ingUnit').value = item.unit;
       document.getElementById('ingThreshold').value = parseFloat(item.low_stock_threshold || 0);
+      document.getElementById('ingTakeoutOnly').checked = Boolean(item.takeout_only);
     } else {
       document.getElementById('modalTitle').textContent = 'Add Ingredient';
       document.getElementById('editForm').reset();
       document.getElementById('ingId').value = '';
+      document.getElementById('ingQty').value = '0';
+      document.getElementById('ingThreshold').value = '0';
     }
-    modal.classList.add('active');
+    document.getElementById('ingredientFormError').textContent = '';
+    updateUnitChips();
+    setModalOpen(modal, true, document.getElementById('ingName'));
   }
 
   function closeEditModal() {
-    document.getElementById('editModal').classList.remove('active');
+    if (document.getElementById('saveIngredientButton').disabled) return;
+    setModalOpen(document.getElementById('editModal'), false);
   }
 
   // Save Ingredient
   async function saveIngredient(e) {
     e.preventDefault();
-    const id = document.getElementById('ingId').value || ('ing-' + document.getElementById('ingName').value.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+    const id = document.getElementById('ingId').value;
     const payload = {
-      id: id,
       name: document.getElementById('ingName').value.trim(),
       quantity_on_hand: parseFloat(document.getElementById('ingQty').value),
       unit: document.getElementById('ingUnit').value.trim(),
       low_stock_threshold: parseFloat(document.getElementById('ingThreshold').value),
-      takeout_only: false
+      takeout_only: document.getElementById('ingTakeoutOnly').checked
     };
+    const button = document.getElementById('saveIngredientButton');
+    const error = document.getElementById('ingredientFormError');
+    error.textContent = '';
+    button.disabled = true;
+    button.textContent = 'Saving...';
     try {
-      await api.upsertIngredient(payload);
+      if (id) await api.updateInventoryIngredient(id, payload);
+      else await api.createInventoryIngredient(payload);
+      button.disabled = false;
       closeEditModal();
-      loadInventory();
+      await loadInventory();
+      setNotice(`Ingredient ${id ? 'updated' : 'created'} successfully.`);
     } catch (err) {
-      alert('Error saving ingredient: ' + err.message);
+      error.textContent = err.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Save';
     }
   }
+
+  function openDeleteModal(id) {
+    const item = inventoryData.find(ingredient => ingredient.id === id);
+    if (!item) return;
+    deleteIngredientId = id;
+    document.getElementById('deleteIngredientName').textContent = `"${item.name}"`;
+    document.getElementById('deleteError').textContent = '';
+    setModalOpen(document.getElementById('deleteModal'), true, document.getElementById('confirmDeleteButton'));
+  }
+
+  function closeDeleteModal() {
+    if (document.getElementById('confirmDeleteButton').disabled) return;
+    deleteIngredientId = null;
+    setModalOpen(document.getElementById('deleteModal'), false);
+  }
+
+  async function confirmDeleteIngredient() {
+    if (!deleteIngredientId) return;
+    const id = deleteIngredientId;
+    const item = inventoryData.find(ingredient => ingredient.id === id);
+    const button = document.getElementById('confirmDeleteButton');
+    button.disabled = true;
+    button.textContent = 'Deleting...';
+    document.getElementById('deleteError').textContent = '';
+    try {
+      await api.deleteInventoryIngredient(id);
+      button.disabled = false;
+      closeDeleteModal();
+      await loadInventory();
+      setNotice(`${item?.name || 'Ingredient'} deleted successfully.`);
+    } catch (error) {
+      document.getElementById('deleteError').textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Delete';
+    }
+  }
+
+  document.querySelectorAll('.modal-overlay').forEach(modal => modal.addEventListener('mousedown', event => {
+    if (event.target !== modal) return;
+    if (modal.id === 'editModal') closeEditModal(); else closeDeleteModal();
+  }));
+  document.addEventListener('keydown', event => {
+    if (!activeModal) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (activeModal.id === 'editModal') closeEditModal(); else closeDeleteModal();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...activeModal.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter(element => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
 
   // Export a formatted Excel workbook matching the inventory report template.
   function exportExcelCsv() {
@@ -247,14 +406,15 @@
           const unit = (unitIdx !== -1 && cols[unitIdx]) ? cols[unitIdx] : 'pcs';
           const threshold = (threshIdx !== -1 && cols[threshIdx]) ? parseFloat(cols[threshIdx]) : 0;
 
-          await api.upsertIngredient({
-            id: id,
+          const payload = {
             name: name,
             quantity_on_hand: qty,
             unit: unit,
             low_stock_threshold: threshold,
             takeout_only: false
-          });
+          };
+          if (inventoryData.some(item => item.id === id)) await api.updateInventoryIngredient(id, payload);
+          else await api.createInventoryIngredient(payload);
           imported++;
         }
 

@@ -7,17 +7,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    .menu-notice{display:none;margin-bottom:16px;padding:12px 14px;border-radius:9px;font-size:14px;font-weight:600}.menu-notice.show{display:block}.menu-notice.success{color:var(--success);background:rgba(45,138,94,.1);border:1px solid rgba(45,138,94,.25)}.menu-notice.error{color:var(--danger);background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.25)}
+    .menu-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.menu-toolbar .btn,.category-tabs .btn,.row-actions .btn,.modal-card .btn{min-height:44px}.category-tabs{display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;padding:2px 2px 8px}.category-tabs .btn{flex:0 0 auto}.row-actions{display:flex;gap:8px;flex-wrap:wrap}.btn-delete-outline{background:transparent;color:var(--danger);border:1.5px solid var(--danger)}.btn-delete-outline:hover{background:rgba(192,57,43,.08)}.btn-danger-solid{background:var(--danger);color:#fff}.btn-danger-solid:hover{background:#9f2f24}
+    .menu-modal{max-width:780px;max-height:calc(100dvh - 32px);overflow-y:auto}.category-modal{max-width:560px}.delete-modal{max-width:430px}.modal-close{min-width:44px;min-height:44px;border-radius:8px}.form-grid{display:grid;grid-template-columns:1fr 180px;gap:12px}.menu-modal .input,.category-modal .input{min-height:48px;width:100%;font-size:16px}.field-label,.section-title{display:block;margin-bottom:6px;color:var(--text-muted);font-size:13px;font-weight:700}.section-title{color:var(--black);font-size:14px}.section-help{margin:-2px 0 10px;color:var(--text-muted);font-size:12px;line-height:1.45}.editor-section{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+    .choice-grid{display:flex;gap:8px;flex-wrap:wrap}.choice-chip{min-height:44px;padding:8px 13px;border:1.5px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font:600 13px/1.2 'Outfit',sans-serif;cursor:pointer}.choice-chip.selected{background:var(--accent-light);border-color:var(--accent);color:var(--accent2)}.choice-chip small{display:block;margin-top:3px;color:var(--text-muted);font-weight:500}.recipe-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.recipe-title-row .section-title{margin-bottom:0}.recipe-toggle{flex:0 0 auto}.recipe-toggle[hidden]{display:none}.recipe-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:280px;overflow-y:auto;padding:2px}.recipe-row{display:grid;grid-template-columns:minmax(0,1fr) 105px;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface2)}.recipe-row label{min-width:0;font-size:13px;font-weight:600}.recipe-row label span{display:block;color:var(--text-muted);font-size:11px;font-weight:500}.recipe-row input{min-height:44px;width:100%;box-sizing:border-box}.recipe-empty{grid-column:1/-1;padding:14px;border:1px dashed var(--border2);border-radius:9px;background:var(--surface2);color:var(--text-muted);font-size:13px;line-height:1.45}.choice-scroll{max-height:190px;overflow-y:auto;padding:2px}
+    .switch-row{display:flex;align-items:center;gap:10px;min-height:48px;cursor:pointer;color:var(--text-muted);font-size:14px}.switch-control{position:relative;width:50px;height:30px;flex:0 0 auto}.switch-control input{position:absolute;opacity:0;width:1px;height:1px}.switch-track{position:absolute;inset:0;border-radius:999px;background:var(--border2);transition:background .18s}.switch-track::after{content:'';position:absolute;width:24px;height:24px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .18s}.switch-control input:checked + .switch-track{background:var(--black)}.switch-control input:checked + .switch-track::after{transform:translateX(20px)}
+    .form-error{min-height:20px;margin-top:8px;color:var(--danger);font-size:13px;font-weight:600}.choice-chip:focus-visible,.row-actions .btn:focus-visible,.category-tabs .btn:focus-visible,.recipe-toggle:focus-visible,.switch-control:focus-within{outline:3px solid var(--accent-light);outline-offset:2px}.category-manager-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.category-chip{min-height:44px}.category-count{margin-left:5px;opacity:.65}.empty-action{margin-top:14px}
+    @media(max-width:700px){.modal-overlay{align-items:flex-end;padding:0}.menu-modal,.category-modal,.delete-modal{max-width:none;max-height:calc(100dvh - 12px);border-radius:16px 16px 0 0;padding:20px}.form-grid,.recipe-list{grid-template-columns:1fr}.data-table thead{display:none}.data-table,.data-table tbody,.data-table tr,.data-table td{display:block;width:100%;box-sizing:border-box}.data-table tr{padding:12px 0;border-bottom:1px solid var(--border)}.data-table td{display:grid;grid-template-columns:100px minmax(0,1fr);gap:10px;padding:7px 12px;border:0}.data-table td::before{content:attr(data-label);color:var(--text-muted);font-size:12px;font-weight:700;text-transform:uppercase}.row-actions{justify-content:flex-start}.data-table td:last-child{align-items:center}.form-actions{flex-wrap:wrap}.form-actions .btn{flex:1 1 120px;justify-content:center}}
+    @media(prefers-reduced-motion:reduce){.modal-overlay,.modal-card,.choice-chip,.switch-track,.switch-track::after{transition:none}}
+  </style>
 </head>
 <body>
 <div class="layout">
   <aside class="sidebar">
-    <div class="sidebar-logo">
-      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
-      <div class="sidebar-logo-text">
-        <h2>Kanlungan<br/>Coffee Garage</h2>
-        <p>Admin Panel</p>
-      </div>
-    </div>
+    <div class="sidebar-logo"><img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/><div class="sidebar-logo-text"><h2>Kanlungan<br/>Coffee Garage</h2><p>Admin Panel</p></div></div>
     <nav class="sidebar-nav">
       <div class="nav-section">Main</div>
       <a href="index.html" class="nav-item"><span class="nav-icon">📊</span> Overview</a>
@@ -31,79 +35,301 @@
     </nav>
     <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
   </aside>
-
   <div class="main">
-    <div class="topbar">
-      <div><h1>Menu</h1><div style="font-size:13px;color:var(--text-muted);">Products & categories</div></div>
-      <div class="topbar-right">
-        <span class="topbar-time" id="topbarTime"></span>
-        <button class="btn-logout" onclick="logout()">Sign Out</button>
-      </div>
-    </div>
-
-    <div class="content fade-up">
+    <div class="topbar"><div><h1>Menu</h1><div style="font-size:13px;color:var(--text-muted);">Products & categories</div></div><div class="topbar-right"><span class="topbar-time" id="topbarTime"></span><button class="btn-logout" onclick="logout()">Sign Out</button></div></div>
+    <main class="content fade-up" id="mainContent">
+      <div id="menuNotice" class="menu-notice" role="status" aria-live="polite"></div>
       <div class="card">
-        <div class="card-header">
-          <div class="card-title">Menu Items</div>
-          <button class="btn btn-outline" onclick="loadMenu()">🔄 Refresh</button>
-        </div>
-
-        <!-- Category filter tabs -->
-        <div id="categoryTabs" style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;"></div>
-
-        <div id="menuTable">
-          <div class="loading"><div class="spinner"></div> Loading menu...</div>
-        </div>
+        <div class="card-header"><div class="card-title">Menu Items</div><div class="menu-toolbar"><button type="button" class="btn btn-outline" id="manageCategoriesButton">Manage Categories</button><button type="button" class="btn btn-primary" id="addMenuItemButton">+ Add Menu Item</button><button type="button" class="btn btn-outline" id="refreshMenuButton">Refresh</button></div></div>
+        <div id="categoryTabs" class="category-tabs" aria-label="Filter menu items by category"></div>
+        <div id="menuTable"><div class="loading"><div class="spinner"></div> Loading menu...</div></div>
       </div>
-    </div>
+    </main>
   </div>
 </div>
 
-<script src="js/auth.js"></script>
-<script src="js/api.js"></script>
+<div class="modal-overlay" id="itemModal" aria-hidden="true">
+  <div class="modal-card menu-modal" role="dialog" aria-modal="true" aria-labelledby="itemModalTitle">
+    <div class="modal-header"><div class="modal-title" id="itemModalTitle">Add Menu Item</div><button type="button" class="modal-close" data-close-modal="itemModal" aria-label="Close menu item editor">&times;</button></div>
+    <form id="itemForm">
+      <input type="hidden" id="itemId"/>
+      <div class="form-grid"><div class="form-row"><label class="field-label" for="itemName">Item name</label><input class="input" id="itemName" maxlength="120" required autocomplete="off"/></div><div class="form-row"><label class="field-label" for="itemPrice">Price</label><input class="input" id="itemPrice" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="0.00"/></div></div>
+      <div class="form-row"><label class="field-label" for="itemDescription">Description</label><textarea class="input" id="itemDescription" maxlength="500" rows="2" placeholder="Custom menu item"></textarea></div>
+      <div class="form-grid"><div class="form-row"><label class="field-label" for="itemCategory">Category</label><select class="input" id="itemCategory" required></select></div><label class="switch-row" for="itemActive"><span class="switch-control"><input type="checkbox" id="itemActive" checked/><span class="switch-track" aria-hidden="true"></span></span><span>Active on POS</span></label></div>
+      <section class="editor-section"><div class="section-title">Modifiers</div><p class="section-help">Choose which existing modifier groups customers can select for this item.</p><div id="modifierChoices" class="choice-grid"></div></section>
+      <section class="editor-section"><div class="section-title">Complementary (Do Not Deduct)</div><p class="section-help">Selected ingredients will not be deducted when this item is sold as complimentary.</p><div id="exclusionChoices" class="choice-grid choice-scroll"></div></section>
+      <section class="editor-section" aria-labelledby="recipeDeductionTitle"><div class="recipe-title-row"><div class="section-title" id="recipeDeductionTitle">Recipe Deduction</div><button type="button" class="btn btn-outline recipe-toggle" id="recipeVisibilityButton" aria-controls="recipeList" aria-expanded="false" hidden>Show All</button></div><p class="section-help" id="recipeHelp">Enter how much stock this item uses each time it sells. At least one positive quantity is required.</p><div id="recipeList" class="recipe-list"></div></section>
+      <div id="itemFormError" class="form-error" role="alert"></div>
+      <div class="form-actions"><button type="button" class="btn btn-outline" data-close-modal="itemModal">Cancel</button><button type="submit" class="btn btn-primary" id="saveItemButton">Save Menu Item</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="categoryModal" aria-hidden="true">
+  <div class="modal-card category-modal" role="dialog" aria-modal="true" aria-labelledby="categoryModalTitle">
+    <div class="modal-header"><div class="modal-title" id="categoryModalTitle">Manage Categories</div><button type="button" class="modal-close" data-close-modal="categoryModal" aria-label="Close category manager">&times;</button></div>
+    <p class="section-help">Select a category to edit, or start a new one.</p>
+    <div id="categoryManagerList" class="category-manager-list"></div>
+    <form id="categoryForm"><input type="hidden" id="categoryId"/><div class="form-row"><label class="field-label" for="categoryName">Category name</label><input class="input" id="categoryName" maxlength="80" required autocomplete="off"/></div><div id="categoryFormError" class="form-error" role="alert"></div><div class="form-actions"><button type="button" class="btn btn-outline" id="newCategoryButton">New</button><button type="button" class="btn btn-delete-outline" id="deleteCategoryButton" disabled>Delete</button><button type="submit" class="btn btn-primary" id="saveCategoryButton">Save</button><button type="button" class="btn btn-outline" data-close-modal="categoryModal">Close</button></div></form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal" aria-hidden="true">
+  <div class="modal-card delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="deleteTitle" aria-describedby="deleteDescription">
+    <div class="modal-header"><div class="modal-title" id="deleteTitle">Delete Menu Item</div><button type="button" class="modal-close" data-close-modal="deleteModal" aria-label="Close delete confirmation">&times;</button></div>
+    <p id="deleteDescription"></p><div id="deleteError" class="form-error" role="alert"></div>
+    <div class="form-actions"><button type="button" class="btn btn-outline" data-close-modal="deleteModal">Cancel</button><button type="button" class="btn btn-danger-solid" id="confirmDeleteButton">Delete</button></div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script><script src="js/api.js"></script><script src="js/recipe-editor.js"></script>
 <script>
   requireAuth(); startClock();
-  let allItems = [], allCategories = [], activeCategory = 'all';
+  let menuData = { categories: [], items: [], modifierGroups: [], itemModifierGroups: [], ingredients: [], recipes: [] };
+  let activeCategory = 'all';
+  let selectedModifierIds = new Set();
+  let selectedExclusionIds = new Set();
+  let recipeDraft = new Map();
+  let recipeEditorIsEditing = false;
+  let showAllRecipeIngredients = true;
+  let deleteTarget = null;
+  let activeModal = null;
+  let previousFocus = null;
 
-  async function loadMenu() {
-    const el = document.getElementById('menuTable');
-    el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
-    [allCategories, allItems] = await Promise.all([api.getMenuCategories(), api.getMenuItems()]);
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[char]);
+  const itemCountFor = id => menuData.items.filter(item => item.category_id === id).length;
+  const parseExclusions = value => Array.isArray(value) ? value : String(value || '').split(',').map(id => id.trim()).filter(Boolean);
 
-    // Build category tabs
-    const tabs = document.getElementById('categoryTabs');
-    tabs.innerHTML = `<button class="btn ${activeCategory==='all'?'btn-primary':'btn-outline'}" onclick="filterCategory('all')">All</button>` +
-      (allCategories || []).map(c =>
-        `<button class="btn ${activeCategory===c.id?'btn-primary':'btn-outline'}" onclick="filterCategory('${c.id}')">${c.name}</button>`
-      ).join('');
-
-    renderMenu();
+  function setNotice(message, type = 'success') {
+    const notice = document.getElementById('menuNotice');
+    notice.textContent = message; notice.className = `menu-notice show ${type}`;
   }
 
-  function filterCategory(id) {
-    activeCategory = id;
-    loadMenu();
+  function setModalOpen(modal, open, focusTarget) {
+    if (open) {
+      previousFocus = document.activeElement; activeModal = modal;
+      modal.classList.add('active'); modal.setAttribute('aria-hidden', 'false'); document.body.style.overflow = 'hidden';
+      setTimeout(() => (focusTarget || modal.querySelector('button,input,select'))?.focus(), 0);
+    } else {
+      modal.classList.remove('active'); modal.setAttribute('aria-hidden', 'true'); activeModal = null;
+      document.body.style.overflow = ''; previousFocus?.focus?.();
+    }
+  }
+
+  function isModalBusy(modal) { return Boolean(modal.querySelector('button:disabled[data-busy="true"]')); }
+  function closeModal(id) { const modal = document.getElementById(id); if (!isModalBusy(modal)) setModalOpen(modal, false); }
+
+  async function loadMenu() {
+    const table = document.getElementById('menuTable');
+    table.innerHTML = '<div class="loading"><div class="spinner"></div> Loading menu...</div>';
+    try {
+      menuData = await api.getMenuManagement();
+      if (activeCategory !== 'all' && !menuData.categories.some(category => category.id === activeCategory)) activeCategory = 'all';
+      renderCategoryTabs(); renderMenu();
+      document.getElementById('addMenuItemButton').disabled = !menuData.categories.length;
+    } catch (error) {
+      table.innerHTML = `<div class="empty-state"><p>${escapeHtml(error.message)}</p><button type="button" class="btn btn-outline empty-action" onclick="loadMenu()">Retry</button></div>`;
+      setNotice(error.message, 'error');
+    }
+  }
+
+  function renderCategoryTabs() {
+    const tabs = document.getElementById('categoryTabs');
+    const choices = [{ id: 'all', name: 'All' }, ...menuData.categories];
+    tabs.innerHTML = choices.map(category => `<button type="button" class="btn ${activeCategory === category.id ? 'btn-primary' : 'btn-outline'}" data-category-filter="${escapeHtml(category.id)}" aria-pressed="${activeCategory === category.id}">${escapeHtml(category.name)}</button>`).join('');
+    tabs.querySelectorAll('[data-category-filter]').forEach(button => button.addEventListener('click', () => {
+      activeCategory = button.dataset.categoryFilter; renderCategoryTabs(); renderMenu();
+    }));
   }
 
   function renderMenu() {
-    const el = document.getElementById('menuTable');
-    const items = activeCategory === 'all' ? allItems : allItems.filter(i => i.category_id === activeCategory);
-    if (!items?.length) {
-      el.innerHTML = '<div class="empty-state"><span class="icon">🍵</span><p>No items found</p></div>'; return;
+    const table = document.getElementById('menuTable');
+    const items = activeCategory === 'all' ? menuData.items : menuData.items.filter(item => item.category_id === activeCategory);
+    if (!items.length) {
+      table.innerHTML = `<div class="empty-state"><p>No menu items found in this category.</p><button type="button" class="btn btn-primary empty-action" data-empty-add>+ Add Menu Item</button></div>`;
+      table.querySelector('[data-empty-add]')?.addEventListener('click', () => openItemModal()); return;
     }
-    const catMap = Object.fromEntries((allCategories||[]).map(c => [c.id, c.name]));
-    el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table">
-      <thead><tr><th>Name</th><th>Category</th><th>Base Price</th><th>Status</th></tr></thead>
-      <tbody>${items.map(item => `
-        <tr>
-          <td style="font-weight:500;">${item.name}</td>
-          <td><span class="badge badge-info">${catMap[item.category_id] || item.category_id}</span></td>
-          <td style="font-weight:600;color:var(--accent);">${formatPeso(item.base_price_cents)}</td>
-          <td><span class="badge ${item.active?'badge-success':'badge-danger'}">${item.active?'Active':'Hidden'}</span></td>
-        </tr>`).join('')}
-      </tbody></table></div>`;
+    const categories = Object.fromEntries(menuData.categories.map(category => [category.id, category.name]));
+    table.innerHTML = `<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Name</th><th>Category</th><th>Base Price</th><th>Status</th><th>Actions</th></tr></thead><tbody>${items.map(item => `<tr>
+      <td data-label="Name" style="font-weight:600">${escapeHtml(item.name)}</td>
+      <td data-label="Category"><span class="badge badge-info">${escapeHtml(categories[item.category_id] || item.category_id)}</span></td>
+      <td data-label="Base Price" style="font-weight:700;color:var(--accent2)">${formatPeso(item.base_price_cents)}</td>
+      <td data-label="Status"><span class="badge ${item.active ? 'badge-success' : 'badge-danger'}">${item.active ? 'Active' : 'Hidden'}</span></td>
+      <td data-label="Actions"><div class="row-actions"><button type="button" class="btn btn-outline" data-edit-item="${escapeHtml(item.id)}">Edit</button><button type="button" class="btn btn-delete-outline" data-delete-item="${escapeHtml(item.id)}">Delete</button></div></td>
+    </tr>`).join('')}</tbody></table></div>`;
+    table.querySelectorAll('[data-edit-item]').forEach(button => button.addEventListener('click', () => openItemModal(button.dataset.editItem)));
+    table.querySelectorAll('[data-delete-item]').forEach(button => button.addEventListener('click', () => openDeleteModal('item', button.dataset.deleteItem)));
   }
 
+  function renderItemChoices(itemId) {
+    document.getElementById('modifierChoices').innerHTML = menuData.modifierGroups.length ? menuData.modifierGroups.map(group => `<button type="button" class="choice-chip ${selectedModifierIds.has(group.id) ? 'selected' : ''}" data-modifier-id="${escapeHtml(group.id)}" aria-pressed="${selectedModifierIds.has(group.id)}">${escapeHtml(group.name)}<small>${group.required ? 'Required' : 'Optional'} · max ${group.max_selections}</small></button>`).join('') : '<span class="section-help">No modifier groups configured.</span>';
+    document.getElementById('exclusionChoices').innerHTML = menuData.ingredients.map(ingredient => `<button type="button" class="choice-chip ${selectedExclusionIds.has(ingredient.id) ? 'selected' : ''}" data-exclusion-id="${escapeHtml(ingredient.id)}" aria-pressed="${selectedExclusionIds.has(ingredient.id)}">${escapeHtml(ingredient.name)}</button>`).join('');
+    renderRecipeEditor();
+    document.querySelectorAll('[data-modifier-id]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.modifierId; selectedModifierIds.has(id) ? selectedModifierIds.delete(id) : selectedModifierIds.add(id); renderItemChoicesPreservingRecipe();
+    }));
+    document.querySelectorAll('[data-exclusion-id]').forEach(button => button.addEventListener('click', () => {
+      const id = button.dataset.exclusionId; selectedExclusionIds.has(id) ? selectedExclusionIds.delete(id) : selectedExclusionIds.add(id);
+      button.classList.toggle('selected', selectedExclusionIds.has(id)); button.setAttribute('aria-pressed', String(selectedExclusionIds.has(id)));
+    }));
+  }
+
+  function renderRecipeEditor() {
+    const button = document.getElementById('recipeVisibilityButton');
+    const ingredients = RecipeEditor.visibleIngredients(menuData.ingredients, recipeDraft, {
+      isEditing: recipeEditorIsEditing,
+      showAll: showAllRecipeIngredients
+    });
+    button.hidden = !recipeEditorIsEditing;
+    button.textContent = showAllRecipeIngredients ? 'Show Recipe Only' : 'Show All';
+    button.setAttribute('aria-expanded', String(showAllRecipeIngredients));
+    document.getElementById('recipeHelp').textContent = recipeEditorIsEditing && !showAllRecipeIngredients
+      ? 'Showing only this item\'s recipe deductions. Select Show All to add another ingredient.'
+      : 'Enter how much stock this item uses each time it sells. At least one positive quantity is required.';
+    const recipeList = document.getElementById('recipeList');
+    if (!ingredients.length) {
+      recipeList.innerHTML = `<div class="recipe-empty">${menuData.ingredients.length
+        ? 'No recipe configured. Select “Show All” to add ingredients.'
+        : 'No inventory ingredients are available. Add an ingredient in Inventory first.'}</div>`;
+      return;
+    }
+    recipeList.innerHTML = ingredients.map(ingredient => `<div class="recipe-row"><label for="recipe-${escapeHtml(ingredient.id)}">${escapeHtml(ingredient.name)}<span>${escapeHtml(ingredient.unit)}</span></label><input class="input recipe-quantity" id="recipe-${escapeHtml(ingredient.id)}" data-ingredient-id="${escapeHtml(ingredient.id)}" type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(recipeDraft.get(ingredient.id) ?? '')}" aria-label="${escapeHtml(ingredient.name)} recipe quantity"/></div>`).join('');
+    recipeList.querySelectorAll('.recipe-quantity').forEach(input => input.addEventListener('input', () => {
+      if (input.value === '') recipeDraft.delete(input.dataset.ingredientId);
+      else recipeDraft.set(input.dataset.ingredientId, input.value);
+    }));
+  }
+
+  function toggleRecipeVisibility() {
+    showAllRecipeIngredients = !showAllRecipeIngredients;
+    renderRecipeEditor();
+  }
+
+  function renderItemChoicesPreservingRecipe() {
+    const modifierContainer = document.getElementById('modifierChoices');
+    modifierContainer.querySelectorAll('[data-modifier-id]').forEach(button => {
+      const selected = selectedModifierIds.has(button.dataset.modifierId); button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
+    });
+  }
+
+  function openItemModal(id = null) {
+    if (!menuData.categories.length) return setNotice('Add a category before creating a menu item.', 'error');
+    const item = id ? menuData.items.find(row => row.id === id) : null;
+    if (id && !item) return setNotice('Menu item not found. Refresh the page and try again.', 'error');
+    document.getElementById('itemModalTitle').textContent = item ? 'Edit Menu Item' : 'Add Menu Item';
+    document.getElementById('itemId').value = item?.id || '';
+    document.getElementById('itemName').value = item?.name || '';
+    document.getElementById('itemDescription').value = item?.description || '';
+    document.getElementById('itemPrice').value = item ? (Number(item.base_price_cents) / 100).toFixed(2) : '';
+    document.getElementById('itemActive').checked = item ? Boolean(item.active) : true;
+    const preferredCategory = item?.category_id || (activeCategory !== 'all' ? activeCategory : menuData.categories[0].id);
+    document.getElementById('itemCategory').innerHTML = menuData.categories.map(category => `<option value="${escapeHtml(category.id)}" ${category.id === preferredCategory ? 'selected' : ''}>${escapeHtml(category.name)}</option>`).join('');
+    selectedModifierIds = new Set(menuData.itemModifierGroups.filter(row => row.item_id === id).map(row => row.group_id));
+    selectedExclusionIds = new Set(parseExclusions(item?.complementary_exclusions));
+    recipeDraft = new Map(menuData.recipes.filter(row => row.item_id === id).map(row => [row.ingredient_id, row.quantity_used]));
+    recipeEditorIsEditing = Boolean(item);
+    showAllRecipeIngredients = !item;
+    document.getElementById('itemFormError').textContent = '';
+    document.getElementById('saveItemButton').textContent = item ? 'Save Changes' : 'Save Menu Item';
+    renderItemChoices(item?.id || null);
+    setModalOpen(document.getElementById('itemModal'), true, document.getElementById('itemName'));
+  }
+
+  async function saveItem(event) {
+    event.preventDefault();
+    const id = document.getElementById('itemId').value;
+    const recipe = RecipeEditor.buildRecipe(menuData.ingredients, recipeDraft);
+    const pricePesos = Number(document.getElementById('itemPrice').value);
+    const payload = {
+      name: document.getElementById('itemName').value.trim(), description: document.getElementById('itemDescription').value.trim(),
+      category_id: document.getElementById('itemCategory').value, base_price_cents: Math.round(pricePesos * 100),
+      active: document.getElementById('itemActive').checked, modifier_group_ids: [...selectedModifierIds], recipe,
+      complementary_exclusion_ids: [...selectedExclusionIds]
+    };
+    const button = document.getElementById('saveItemButton'); const error = document.getElementById('itemFormError');
+    error.textContent = ''; button.disabled = true; button.dataset.busy = 'true'; button.textContent = 'Saving...';
+    try {
+      if (id) await api.updateMenuItem(id, payload); else await api.createMenuItem(payload);
+      button.disabled = false; delete button.dataset.busy; closeModal('itemModal'); await loadMenu();
+      setNotice(`${payload.name} ${id ? 'updated' : 'added'} successfully.`);
+    } catch (failure) { error.textContent = failure.message; }
+    finally { button.disabled = false; delete button.dataset.busy; button.textContent = id ? 'Save Changes' : 'Save Menu Item'; }
+  }
+
+  function renderCategoryManager() {
+    const selected = document.getElementById('categoryId').value;
+    document.getElementById('categoryManagerList').innerHTML = menuData.categories.map(category => `<button type="button" class="choice-chip category-chip ${selected === category.id ? 'selected' : ''}" data-manage-category="${escapeHtml(category.id)}" aria-pressed="${selected === category.id}">${escapeHtml(category.name)}<span class="category-count">${itemCountFor(category.id)}</span></button>`).join('');
+    document.querySelectorAll('[data-manage-category]').forEach(button => button.addEventListener('click', () => selectCategoryForEditing(button.dataset.manageCategory)));
+  }
+
+  function newCategory() {
+    document.getElementById('categoryId').value = ''; document.getElementById('categoryName').value = '';
+    document.getElementById('categoryFormError').textContent = ''; document.getElementById('deleteCategoryButton').disabled = true;
+    renderCategoryManager(); document.getElementById('categoryName').focus();
+  }
+
+  function selectCategoryForEditing(id) {
+    const category = menuData.categories.find(row => row.id === id); if (!category) return;
+    document.getElementById('categoryId').value = category.id; document.getElementById('categoryName').value = category.name;
+    document.getElementById('categoryFormError').textContent = ''; document.getElementById('deleteCategoryButton').disabled = false;
+    renderCategoryManager();
+  }
+
+  function openCategoryModal() { newCategory(); setModalOpen(document.getElementById('categoryModal'), true, document.getElementById('categoryName')); }
+
+  async function saveCategory(event) {
+    event.preventDefault(); const id = document.getElementById('categoryId').value; const name = document.getElementById('categoryName').value.trim();
+    const button = document.getElementById('saveCategoryButton'); const error = document.getElementById('categoryFormError');
+    error.textContent = ''; button.disabled = true; button.dataset.busy = 'true'; button.textContent = 'Saving...';
+    try {
+      const saved = id ? await api.updateMenuCategory(id, { name }) : await api.createMenuCategory({ name });
+      await loadMenu(); selectCategoryForEditing(saved.id); setNotice(`${saved.name} category saved.`);
+    } catch (failure) { error.textContent = failure.message; }
+    finally { button.disabled = false; delete button.dataset.busy; button.textContent = 'Save'; }
+  }
+
+  function openDeleteModal(type, id) {
+    const record = type === 'item' ? menuData.items.find(row => row.id === id) : menuData.categories.find(row => row.id === id);
+    if (!record) return setNotice(`${type === 'item' ? 'Menu item' : 'Category'} not found. Refresh and try again.`, 'error');
+    deleteTarget = { type, id, name: record.name };
+    document.getElementById('deleteTitle').textContent = type === 'item' ? 'Delete Menu Item' : 'Delete Category';
+    document.getElementById('deleteDescription').textContent = `Delete "${record.name}"? This cannot be undone.`;
+    document.getElementById('deleteError').textContent = '';
+    if (activeModal) setModalOpen(activeModal, false);
+    setModalOpen(document.getElementById('deleteModal'), true, document.getElementById('confirmDeleteButton'));
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return; const target = deleteTarget; const button = document.getElementById('confirmDeleteButton');
+    button.disabled = true; button.dataset.busy = 'true'; button.textContent = 'Deleting...'; document.getElementById('deleteError').textContent = '';
+    try {
+      if (target.type === 'item') await api.deleteMenuItem(target.id); else await api.deleteMenuCategory(target.id);
+      button.disabled = false; delete button.dataset.busy; deleteTarget = null; closeModal('deleteModal'); await loadMenu();
+      setNotice(`${target.name} deleted successfully.`);
+    } catch (failure) { document.getElementById('deleteError').textContent = failure.message; }
+    finally { button.disabled = false; delete button.dataset.busy; button.textContent = 'Delete'; }
+  }
+
+  document.getElementById('refreshMenuButton').addEventListener('click', loadMenu);
+  document.getElementById('addMenuItemButton').addEventListener('click', () => openItemModal());
+  document.getElementById('manageCategoriesButton').addEventListener('click', openCategoryModal);
+  document.getElementById('recipeVisibilityButton').addEventListener('click', toggleRecipeVisibility);
+  document.getElementById('itemForm').addEventListener('submit', saveItem);
+  document.getElementById('categoryForm').addEventListener('submit', saveCategory);
+  document.getElementById('newCategoryButton').addEventListener('click', newCategory);
+  document.getElementById('deleteCategoryButton').addEventListener('click', () => openDeleteModal('category', document.getElementById('categoryId').value));
+  document.getElementById('confirmDeleteButton').addEventListener('click', confirmDelete);
+  document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => closeModal(button.dataset.closeModal)));
+  document.querySelectorAll('.modal-overlay').forEach(modal => modal.addEventListener('mousedown', event => { if (event.target === modal) closeModal(modal.id); }));
+  document.addEventListener('keydown', event => {
+    if (!activeModal) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeModal(activeModal.id); return; }
+    if (event.key !== 'Tab') return;
+    const focusable = [...activeModal.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(element => element.offsetParent !== null);
+    if (!focusable.length) return; const first = focusable[0]; const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
   loadMenu();
 </script>
 </body>

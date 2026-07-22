@@ -26,11 +26,48 @@ const api = {
   getSales: (days = 7) => apiFetch(`/admin/sales?days=${days}`),
   getOrders: (limit = 50, offset = 0) => apiFetch(`/admin/orders?limit=${limit}&offset=${offset}`),
   getInventory: () => apiFetch('/admin/inventory'),
+  createInventoryIngredient: (ingredient) => apiFetch('/admin/inventory', {
+    method: 'POST', body: JSON.stringify(ingredient)
+  }),
+  updateInventoryIngredient: (id, ingredient) => apiFetch(`/admin/inventory/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(ingredient)
+  }),
+  deleteInventoryIngredient: (id) => apiFetch(`/admin/inventory/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
+  getMenuManagement: () => apiFetch('/admin/menu'),
+  createMenuCategory: (category) => apiFetch('/admin/menu/categories', {
+    method: 'POST', body: JSON.stringify(category)
+  }),
+  updateMenuCategory: (id, category) => apiFetch(`/admin/menu/categories/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(category)
+  }),
+  deleteMenuCategory: (id) => apiFetch(`/admin/menu/categories/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
+  createMenuItem: (item) => apiFetch('/admin/menu/items', {
+    method: 'POST', body: JSON.stringify(item)
+  }),
+  updateMenuItem: (id, item) => apiFetch(`/admin/menu/items/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(item)
+  }),
+  deleteMenuItem: (id) => apiFetch(`/admin/menu/items/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
+  getEmployees: () => apiFetch('/admin/employees'),
+  createEmployee: (employee) => apiFetch('/admin/employees', {
+    method: 'POST', body: JSON.stringify(employee)
+  }),
+  updateEmployee: (id, employee) => apiFetch(`/admin/employees/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(employee)
+  }),
+  deactivateEmployee: (id) => apiFetch(`/admin/employees/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
 
   // Table endpoints
   getMenuCategories: () => apiFetch('/admin/data/menu_category?select=*'),
   getMenuItems: () => apiFetch('/admin/data/menu_item?select=*'),
-  getEmployees: () => apiFetch('/admin/data/employee?select=*'),
   getPaymentMethods: () => apiFetch('/admin/data/payment_method?select=*'),
   getStoreSettings: () => apiFetch('/admin/data/store_settings?select=*'),
   getIngredients: () => apiFetch('/admin/data/ingredient?select=*'),
@@ -38,13 +75,6 @@ const api = {
   upsertMenuItem: (item) => apiFetch('/admin/data/menu_item?on_conflict=id', {
     method: 'POST', body: JSON.stringify(item)
   }),
-  upsertEmployee: (emp) => apiFetch('/admin/data/employee?on_conflict=id', {
-    method: 'POST', body: JSON.stringify(emp)
-  }),
-  upsertIngredient: (ing) => apiFetch('/admin/data/ingredient?on_conflict=id', {
-    method: 'POST', body: JSON.stringify(ing)
-  }),
-
   getDevices: () => apiFetch('/admin/devices'),
   createEnrollment: (deviceName, role) => apiFetch('/admin/enrollments', {
     method: 'POST', body: JSON.stringify({ deviceName, role })

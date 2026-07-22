@@ -1,0 +1,724 @@
+{
+  "createdAt": "2026-07-22T14:54:50.062Z",
+  "branchId": "main",
+  "ids": [
+    "almond",
+    "banana-bread-stock",
+    "caramel-sauce",
+    "chai-base",
+    "chocolate-croissant-stock",
+    "chocolate-sauce",
+    "cinnamon-roll-stock",
+    "coldbrew-base",
+    "condensed-cream",
+    "cookie-stock",
+    "croissant-stock",
+    "cups",
+    "beans",
+    "frappe-base",
+    "g",
+    "sandwich-stock",
+    "lemon-tea-base",
+    "matcha-powder",
+    "muffin-stock",
+    "oat",
+    "strawberry-base",
+    "sugar-syrup",
+    "vanilla-base",
+    "white-chocolate-sauce",
+    "milk"
+  ],
+  "ingredients": [
+    {
+      "id": "almond",
+      "name": "Almond Milk",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 48,
+      "takeout_only": false
+    },
+    {
+      "id": "banana-bread-stock",
+      "name": "Banana Bread Slices",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 6,
+      "takeout_only": false
+    },
+    {
+      "id": "beans",
+      "name": "Espresso Beans",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 60,
+      "takeout_only": false
+    },
+    {
+      "id": "caramel-sauce",
+      "name": "Caramel Sauce",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 24,
+      "takeout_only": false
+    },
+    {
+      "id": "chai-base",
+      "name": "Chai Base",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 40,
+      "takeout_only": false
+    },
+    {
+      "id": "chocolate-croissant-stock",
+      "name": "Chocolate Croissants",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 5,
+      "takeout_only": false
+    },
+    {
+      "id": "chocolate-sauce",
+      "name": "Chocolate Sauce",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 32,
+      "takeout_only": false
+    },
+    {
+      "id": "cinnamon-roll-stock",
+      "name": "Cinnamon Rolls",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 5,
+      "takeout_only": false
+    },
+    {
+      "id": "coldbrew-base",
+      "name": "Cold Brew Base",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 60,
+      "takeout_only": false
+    },
+    {
+      "id": "condensed-cream",
+      "name": "Condensed Cream",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 24,
+      "takeout_only": false
+    },
+    {
+      "id": "cookie-stock",
+      "name": "Cookies",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 12,
+      "takeout_only": false
+    },
+    {
+      "id": "croissant-stock",
+      "name": "Croissants",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 6,
+      "takeout_only": false
+    },
+    {
+      "id": "cups",
+      "name": "cups",
+      "unit": "L",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 0,
+      "takeout_only": true
+    },
+    {
+      "id": "frappe-base",
+      "name": "Frappe Base",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 36,
+      "takeout_only": false
+    },
+    {
+      "id": "g",
+      "name": "g",
+      "unit": "L",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 5,
+      "takeout_only": false
+    },
+    {
+      "id": "lemon-tea-base",
+      "name": "Lemon Tea Base",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 40,
+      "takeout_only": false
+    },
+    {
+      "id": "matcha-powder",
+      "name": "Matcha Powder",
+      "unit": "g",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 100,
+      "takeout_only": false
+    },
+    {
+      "id": "milk",
+      "name": "Whole Milk",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 96,
+      "takeout_only": false
+    },
+    {
+      "id": "muffin-stock",
+      "name": "Muffins",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 6,
+      "takeout_only": false
+    },
+    {
+      "id": "oat",
+      "name": "Oat Milk",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 48,
+      "takeout_only": false
+    },
+    {
+      "id": "sandwich-stock",
+      "name": "Ham & Cheese Sandwiches",
+      "unit": "ea",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 5,
+      "takeout_only": false
+    },
+    {
+      "id": "strawberry-base",
+      "name": "Strawberry Milk Base",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 28,
+      "takeout_only": false
+    },
+    {
+      "id": "sugar-syrup",
+      "name": "Sugar Syrup",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 30,
+      "takeout_only": false
+    },
+    {
+      "id": "vanilla-base",
+      "name": "Vanilla Shake Base",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 28,
+      "takeout_only": false
+    },
+    {
+      "id": "white-chocolate-sauce",
+      "name": "White Chocolate Sauce",
+      "unit": "oz",
+      "quantity_on_hand": 0,
+      "low_stock_threshold": 24,
+      "takeout_only": false
+    }
+  ],
+  "recipeIngredients": [
+    {
+      "item_id": "americano",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "banana-bread",
+      "ingredient_id": "banana-bread-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "cappuccino",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "cappuccino",
+      "ingredient_id": "milk",
+      "quantity_used": 6
+    },
+    {
+      "item_id": "chai",
+      "ingredient_id": "chai-base",
+      "quantity_used": 6
+    },
+    {
+      "item_id": "chai",
+      "ingredient_id": "milk",
+      "quantity_used": 6
+    },
+    {
+      "item_id": "chocolate-croissant",
+      "ingredient_id": "chocolate-croissant-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "cinnamon-roll",
+      "ingredient_id": "cinnamon-roll-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "coffee-croissant-combo",
+      "ingredient_id": "beans",
+      "quantity_used": 0.5
+    },
+    {
+      "item_id": "coffee-croissant-combo",
+      "ingredient_id": "croissant-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "coffee-frappe",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "coffee-frappe",
+      "ingredient_id": "frappe-base",
+      "quantity_used": 2
+    },
+    {
+      "item_id": "coffee-frappe",
+      "ingredient_id": "milk",
+      "quantity_used": 6
+    },
+    {
+      "item_id": "coldbrew",
+      "ingredient_id": "coldbrew-base",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "cookies",
+      "ingredient_id": "cookie-stock",
+      "quantity_used": 2
+    },
+    {
+      "item_id": "croissant",
+      "ingredient_id": "croissant-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "drip",
+      "ingredient_id": "beans",
+      "quantity_used": 0.5
+    },
+    {
+      "item_id": "ham-cheese-sandwich",
+      "ingredient_id": "sandwich-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "hot-chocolate",
+      "ingredient_id": "chocolate-sauce",
+      "quantity_used": 1.5
+    },
+    {
+      "item_id": "hot-chocolate",
+      "ingredient_id": "milk",
+      "quantity_used": 10
+    },
+    {
+      "item_id": "iced-americano",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "iced-latte",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "iced-latte",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "ingredient_id": "condensed-cream",
+      "quantity_used": 1.5
+    },
+    {
+      "item_id": "iced-spanish-latte",
+      "ingredient_id": "milk",
+      "quantity_used": 7
+    },
+    {
+      "item_id": "latte",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "latte",
+      "ingredient_id": "milk",
+      "quantity_used": 10
+    },
+    {
+      "item_id": "lemon-iced-tea",
+      "ingredient_id": "lemon-tea-base",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "matcha",
+      "ingredient_id": "matcha-powder",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "matcha",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "matcha-frappe",
+      "ingredient_id": "frappe-base",
+      "quantity_used": 2
+    },
+    {
+      "item_id": "matcha-frappe",
+      "ingredient_id": "matcha-powder",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "matcha-frappe",
+      "ingredient_id": "milk",
+      "quantity_used": 7
+    },
+    {
+      "item_id": "mocha",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "mocha",
+      "ingredient_id": "chocolate-sauce",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "mocha",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "morning-set",
+      "ingredient_id": "banana-bread-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "morning-set",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "morning-set",
+      "ingredient_id": "milk",
+      "quantity_used": 10
+    },
+    {
+      "item_id": "muffin",
+      "ingredient_id": "muffin-stock",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "ingredient_id": "caramel-sauce",
+      "quantity_used": 1
+    },
+    {
+      "item_id": "salted-caramel-latte",
+      "ingredient_id": "milk",
+      "quantity_used": 9
+    },
+    {
+      "item_id": "spanish-latte",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "spanish-latte",
+      "ingredient_id": "condensed-cream",
+      "quantity_used": 1.5
+    },
+    {
+      "item_id": "spanish-latte",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "strawberry-milk",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "strawberry-milk",
+      "ingredient_id": "strawberry-base",
+      "quantity_used": 1.5
+    },
+    {
+      "item_id": "student-snack-combo",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "student-snack-combo",
+      "ingredient_id": "cookie-stock",
+      "quantity_used": 2
+    },
+    {
+      "item_id": "student-snack-combo",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "vanilla-milkshake",
+      "ingredient_id": "vanilla-base",
+      "quantity_used": 2
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "ingredient_id": "milk",
+      "quantity_used": 8
+    },
+    {
+      "item_id": "white-chocolate-mocha",
+      "ingredient_id": "white-chocolate-sauce",
+      "quantity_used": 1
+    }
+  ],
+  "modifierRecipeIngredients": [
+    {
+      "option_id": "almond",
+      "ingredient_id": "almond",
+      "quantity_used": 0,
+      "replaces_ingredient_id": "milk"
+    },
+    {
+      "option_id": "caramel",
+      "ingredient_id": "caramel-sauce",
+      "quantity_used": 1,
+      "replaces_ingredient_id": null
+    },
+    {
+      "option_id": "extra-shot",
+      "ingredient_id": "beans",
+      "quantity_used": 0.65,
+      "replaces_ingredient_id": null
+    },
+    {
+      "option_id": "oat",
+      "ingredient_id": "oat",
+      "quantity_used": 0,
+      "replaces_ingredient_id": "milk"
+    }
+  ],
+  "inventoryBalances": [],
+  "tombstones": [
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "almond",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "banana-bread-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "beans",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "caramel-sauce",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "chai-base",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "chocolate-croissant-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "chocolate-sauce",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "cinnamon-roll-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "coldbrew-base",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "condensed-cream",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "cookie-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "croissant-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "cups",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "frappe-base",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "g",
+      "deleted_at": "1784290513677",
+      "deleted_by_device": "3998a58d-400d-4e36-95af-c84c87c44191"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "lemon-tea-base",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "matcha-powder",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "milk",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "muffin-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "oat",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "sandwich-stock",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "strawberry-base",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "sugar-syrup",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "vanilla-base",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    },
+    {
+      "branch_id": "main",
+      "entity_type": "ingredient",
+      "entity_id": "white-chocolate-sauce",
+      "deleted_at": "1784186040257",
+      "deleted_by_device": "fbdc184b-8022-44d1-b402-f8f698c6cba7"
+    }
+  ]
+}
