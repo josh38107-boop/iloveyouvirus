@@ -6,6 +6,10 @@ const db = require('./db');
 const rpc = require('./rpc');
 const { createCloud } = require('./cloud');
 
+process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
+process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'KapeAdmin2024';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const cloud = createCloud(db);
