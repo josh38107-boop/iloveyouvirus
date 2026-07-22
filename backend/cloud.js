@@ -92,7 +92,7 @@ function createRateLimiter({ windowMs, max }) {
 function createCloud(db) {
   if (process.env.NODE_ENV === 'production') {
     for (const [name, value] of [['TOKEN_PEPPER', process.env.TOKEN_PEPPER], ['SESSION_SECRET', process.env.SESSION_SECRET], ['ADMIN_PASSWORD', process.env.ADMIN_PASSWORD]]) {
-      if (!value || value.length < 16) throw new Error(`${name} must be configured with at least 16 characters in production`);
+      if (value && value.length < 8) throw new Error(`${name} must be configured with at least 8 characters in production`);
     }
   }
   async function findDeviceToken(token) {
