@@ -62,6 +62,3 @@ CREATE INDEX IF NOT EXISTS idx_sync_enrollment_expiry ON sync_enrollment(expires
 CREATE INDEX IF NOT EXISTS idx_sync_mutation_device ON sync_mutation(device_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sync_change_branch_cursor ON sync_change(branch_id, sequence);
 CREATE INDEX IF NOT EXISTS idx_sync_change_entity ON sync_change(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_pos_order_created_at ON pos_order(created_at);
-CREATE INDEX IF NOT EXISTS idx_payment_order_id ON payment(order_id);
-CREATE INDEX IF NOT EXISTS idx_order_line_order_id ON order_line(order_id);
