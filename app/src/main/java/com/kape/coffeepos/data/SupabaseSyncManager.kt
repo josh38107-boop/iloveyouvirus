@@ -44,6 +44,16 @@ data class PromotionConfig(
     val message: String? = null
 )
 
+internal data class OperationalResetState(
+    val generation: Long = 0,
+    val protocolVersion: Int = 1
+)
+
+internal fun shouldApplyOperationalReset(localGeneration: Long, remoteGeneration: Long): Boolean =
+    remoteGeneration > localGeneration
+
+internal fun isLegacyResetStateResponse(responseCode: Int): Boolean = responseCode == 404
+
 internal fun posOrderUploadPayload(
     order: PosOrder,
     shiftSource: Pair<String, Long>
@@ -224,6 +234,7 @@ class SupabaseSyncManager(
     private val syncPrefs: SharedPreferences = context.getSharedPreferences("supabase_sync_state", Context.MODE_PRIVATE)
     private val promotionPrefs: SharedPreferences = context.getSharedPreferences("promotion_pending_state", Context.MODE_PRIVATE)
     private val tokenStore = SecureTokenStore(context)
+    private val resetProtocolVersion = 1
 
     // Configuration properties
     var supabaseUrl: String
@@ -330,6 +341,15 @@ class SupabaseSyncManager(
 
     private fun storeSettingsFingerprint(settings: StoreSettings): String = gson.toJson(settings)
 
+    private var appliedResetGeneration: Long
+        get() = prefs.getLong("operational_reset_generation", 0L)
+        set(value) = prefs.edit().putLong("operational_reset_generation", value).apply()
+
+    private fun withResetHeaders(builder: Request.Builder): Request.Builder =
+        builder
+            .header("X-Reset-Protocol-Version", resetProtocolVersion.toString())
+            .header("X-Operational-Reset-Generation", appliedResetGeneration.toString())
+
     suspend fun <T> runManagerConfigurationMutation(block: suspend () -> T): Result<T> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -399,8 +419,37 @@ class SupabaseSyncManager(
             .filter { it.startsWith("remote_order:") }
             .forEach { key -> editor.remove(key) }
         editor.apply()
+        prefs.edit().putLong("render_sync_cursor", 0L).apply()
         lastSyncTime = 0L
         promotionPrefs.edit().clear().apply()
+    }
+
+    private fun fetchOperationalResetState(): OperationalResetState {
+        val request = withResetHeaders(
+            Request.Builder()
+                .url("$renderCloudUrl/sync/v1/reset-state")
+                .header("Authorization", "Bearer $deviceToken")
+        ).get().build()
+        return client.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            // Older backend versions do not expose this endpoint. Treat them as
+            // generation zero until the reset-aware backend rollout completes.
+            if (isLegacyResetStateResponse(response.code)) return@use OperationalResetState()
+            if (!response.isSuccessful) {
+                throw Exception("Render reset check failed: HTTP ${response.code}: $body")
+            }
+            gson.fromJson(body, OperationalResetState::class.java) ?: OperationalResetState()
+        }
+    }
+
+    private suspend fun applyOperationalResetIfRequired(): Boolean {
+        val resetState = fetchOperationalResetState()
+        if (!shouldApplyOperationalReset(appliedResetGeneration, resetState.generation)) return false
+        clearOperationalHistoryPreservingInventory(db)
+        clearOperationalSyncState()
+        appliedResetGeneration = resetState.generation
+        Log.i(TAG, "Applied operational reset generation ${resetState.generation}")
+        return true
     }
 
     fun startSyncLoop(scope: CoroutineScope) {
@@ -476,6 +525,7 @@ class SupabaseSyncManager(
             Log.d(TAG, "Sync starting. Device ID: $deviceId")
 
             try {
+                val appliedOperationalReset = applyOperationalResetIfRequired()
                 refreshChangeCursor()
                 refreshAuthority()
                 // 1. Delete tombstones must win before normal catalog upload/download.
@@ -538,6 +588,7 @@ class SupabaseSyncManager(
 
                 lastSyncTime = System.currentTimeMillis()
                 lastSyncStatus = when {
+                    appliedOperationalReset -> "Cloud reset applied; sync successful"
                     !orderAddOnSyncReady -> "Sync partial: deploy the Render migration for order add-ons"
                     !tombstoneSyncReady -> "Sync successful; local deletes held until the Render migration runs"
                     managerDeviceId.isBlank() -> "Choose a Manager Tablet in Sync Settings"
@@ -574,7 +625,7 @@ class SupabaseSyncManager(
             else -> "$renderCloudUrl/rest/v1/$path"
         }
         val credential = deviceToken.ifBlank { supabaseKey }
-        val requestBuilder = Request.Builder()
+        val requestBuilder = withResetHeaders(Request.Builder())
             .url(url)
             .header("Content-Type", "application/json")
             .header("Prefer", prefer)
@@ -629,7 +680,7 @@ class SupabaseSyncManager(
     }
 
     private fun pushOperations(operations: List<Map<String, Any?>>): String {
-        val request = Request.Builder().url("$renderCloudUrl/sync/v1/push")
+        val request = withResetHeaders(Request.Builder()).url("$renderCloudUrl/sync/v1/push")
             .header("Authorization", "Bearer $deviceToken")
             .header("Content-Type", "application/json")
             .post(gson.toJson(mapOf("operations" to operations)).toRequestBody(jsonMediaType)).build()
@@ -643,7 +694,7 @@ class SupabaseSyncManager(
     private fun refreshChangeCursor() {
         if (!isEnrolled) return
         val cursor = prefs.getLong("render_sync_cursor", 0L)
-        val request = Request.Builder().url("$renderCloudUrl/sync/v1/changes?cursor=$cursor")
+        val request = withResetHeaders(Request.Builder()).url("$renderCloudUrl/sync/v1/changes?cursor=$cursor")
             .header("Authorization", "Bearer $deviceToken").get().build()
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()

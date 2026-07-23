@@ -3753,22 +3753,15 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
 
         Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Database Maintenance", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                Text("Clear all transactions, receipts, cash drawer shifts, reports, inventory history, and stock quantities. Menu items and ingredient definitions will NOT be deleted.", fontSize = 13.sp, color = Color.Gray)
-                Spacer(Modifier.height(4.dp))
-                Button(
-                    onClick = { viewModel.showResetConfirmDialog(true) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Reset All Operations & Inventory")
-                }
+                Text("Data Maintenance", fontWeight = FontWeight.Bold)
+                Text(
+                    "Orders and reports are reset from Data Maintenance on the admin website. This POS automatically applies the cloud reset before uploading or downloading transactions.",
+                    fontSize = 13.sp,
+                    color = Color.Gray
+                )
             }
         }
 
-        if (state.showResetConfirmDialog) {
-            ResetConfirmDialog(state, viewModel)
-        }
         if (state.showManagerAuthorityDialog) {
             AlertDialog(
                 onDismissRequest = { viewModel.showManagerAuthorityDialog(false) },
@@ -3852,28 +3845,6 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
             )
         }
     }
-}
-
-@Composable
-private fun ResetConfirmDialog(state: PosUiState, viewModel: PosViewModel) {
-    AlertDialog(
-        onDismissRequest = { viewModel.showResetConfirmDialog(false) },
-        title = { Text("Confirm Reset") },
-        text = { Text("Are you sure you want to delete all reports, transactions, shifts, and inventory history, and reset every stock quantity to zero? This action is permanent and cannot be undone.") },
-        confirmButton = {
-            Button(
-                onClick = viewModel::truncateDailyReport,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("Clear All")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { viewModel.showResetConfirmDialog(false) }) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
 @Composable

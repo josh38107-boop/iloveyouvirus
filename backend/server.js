@@ -10,6 +10,7 @@ const { createMenuService } = require('./menu');
 const { createEmployeeService } = require('./employees');
 const { createDiscountService } = require('./discounts');
 const { createPaymentVoidService } = require('./payment-void');
+const { createDataMaintenanceService } = require('./data-maintenance');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -23,6 +24,7 @@ const menu = createMenuService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 
 const employees = createEmployeeService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const discounts = createDiscountService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const paymentVoid = createPaymentVoidService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
+const dataMaintenance = createDataMaintenanceService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const promotion = rpc.createPromotionService(db);
 
 // ─── Allowed tables (whitelist for security) ─────────────────────────────────
@@ -33,6 +35,14 @@ const ALLOWED_TABLES = new Set([
   'modifier_recipe_ingredient', 'payment_method', 'discount_rule', 'employee',
   'store_settings', 'shift', 'pos_order', 'order_line', 'payment',
   'receipt', 'stock_snapshot', 'inventory_balance', 'order_inventory_add_on'
+]);
+const RESET_GUARDED_TABLES = new Set([
+  'shift', 'pos_order', 'order_line', 'payment', 'receipt',
+  'stock_snapshot', 'order_inventory_add_on', 'inventory_balance'
+]);
+const RESET_GUARDED_RPCS = new Set([
+  'apply_inventory_event', 'get_promotion_result', 'reserve_promotion_claim',
+  'release_promotion_claim', 'finalize_promotion_claim', 'mark_promotion_printed'
 ]);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -46,6 +56,41 @@ app.use(express.static(path.join(__dirname, '..', 'dashboard')));
 
 const authenticate = cloud.legacyAuth;
 const adminAuthenticate = cloud.adminAuth;
+
+async function requireCurrentResetGeneration(req, res, next) {
+  try {
+    const branchId = req.syncDevice?.branch_id || process.env.DEFAULT_BRANCH_ID || 'main';
+    const state = await db.query(
+      'SELECT generation FROM operational_reset_state WHERE branch_id=$1 LIMIT 1',
+      [branchId]
+    );
+    const currentGeneration = Number(state.rows[0]?.generation || 0);
+    const rawGeneration = req.headers['x-operational-reset-generation'];
+    if (currentGeneration === 0 && (rawGeneration == null || rawGeneration === '')) return next();
+    const reportedGeneration = Number(rawGeneration);
+    if (!Number.isSafeInteger(reportedGeneration) || reportedGeneration < 0 ||
+        reportedGeneration !== currentGeneration) {
+      return res.status(409).json({
+        error: 'Install the latest POS APK and sync before uploading operational data.',
+        code: 'OPERATIONAL_RESET_REQUIRED',
+        currentGeneration
+      });
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+function guardLegacyOperationalWrite(req, res, next) {
+  if (req.method === 'GET' || !RESET_GUARDED_TABLES.has(req.params.table)) return next();
+  return requireCurrentResetGeneration(req, res, next);
+}
+
+function guardOperationalRpc(req, res, next) {
+  if (!RESET_GUARDED_RPCS.has(req.params.fn)) return next();
+  return requireCurrentResetGeneration(req, res, next);
+}
 
 // ─── Parse PostgREST-style filter query params ────────────────────────────────
 function parseFilters(query) {
@@ -198,7 +243,7 @@ async function handleDelete(req, res, table) {
 }
 
 // ─── PostgREST-compatible table routes ───────────────────────────────────────
-app.all('/rest/v1/:table', authenticate, async (req, res) => {
+app.all('/rest/v1/:table', authenticate, guardLegacyOperationalWrite, async (req, res) => {
   const { table } = req.params;
   if (!ALLOWED_TABLES.has(table)) {
     return res.status(404).json({ error: `Table '${table}' not found` });
@@ -273,8 +318,8 @@ function rejectDevicePromotionUpdate(req, res, next) {
   return next();
 }
 
-app.post('/rest/v1/rpc/:fn', authenticate, rejectDevicePromotionUpdate, handleRpc);
-app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, (req, res, next) => {
+app.post('/rest/v1/rpc/:fn', authenticate, rejectDevicePromotionUpdate, guardOperationalRpc, handleRpc);
+app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, guardOperationalRpc, (req, res, next) => {
   if (req.params.fn === 'update_promotion_config') {
     return res.status(403).json({ error: 'Manage Free Drink Promotion settings in the admin website.' });
   }
@@ -595,6 +640,22 @@ app.get('/admin/promotion/claims', adminAuthenticate, async (req, res) => {
   }
 });
 
+app.get('/admin/data-maintenance', adminAuthenticate, async (req, res) => {
+  try { res.json(await dataMaintenance.getStatus()); }
+  catch (err) {
+    console.error('GET /admin/data-maintenance:', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
+  }
+});
+
+app.post('/admin/data-maintenance/reset', adminAuthenticate, async (req, res) => {
+  try { res.json(await dataMaintenance.reset(req.body || {}, req.admin.sub)); }
+  catch (err) {
+    console.error('POST /admin/data-maintenance/reset:', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
+  }
+});
+
 app.get('/admin/employees', adminAuthenticate, async (req, res) => {
   try { res.json(await employees.list()); }
   catch (err) { console.error('GET /admin/employees:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
@@ -620,15 +681,22 @@ app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() 
 app.get('/ready', async (req, res) => {
   try {
     const requiredTables = ['sync_device', 'sync_enrollment', 'sync_mutation', 'sync_change',
-      'sync_device_authority', 'sync_tombstone', 'inventory_balance'];
+      'sync_device_authority', 'sync_tombstone', 'inventory_balance', 'operational_reset_state',
+      'operational_reset_audit'];
     const schema = await db.query(`SELECT table_name, column_name, data_type
       FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = ANY($1::text[])`, [requiredTables]);
     const tables = new Set(schema.rows.map(row => row.table_name));
+    const syncDeviceColumns = new Set(schema.rows
+      .filter(row => row.table_name === 'sync_device')
+      .map(row => row.column_name));
     const invalidBranchTypes = schema.rows.some(row =>
-      ['sync_device_authority', 'sync_tombstone', 'inventory_balance'].includes(row.table_name) &&
+      ['sync_device_authority', 'sync_tombstone', 'inventory_balance', 'operational_reset_state',
+        'operational_reset_audit'].includes(row.table_name) &&
       row.column_name === 'branch_id' && row.data_type !== 'text');
-    if (requiredTables.some(table => !tables.has(table)) || invalidBranchTypes) {
+    const missingResetColumns = ['reset_protocol_version', 'acknowledged_reset_generation']
+      .some(column => !syncDeviceColumns.has(column));
+    if (requiredTables.some(table => !tables.has(table)) || invalidBranchTypes || missingResetColumns) {
       return res.status(503).json({ status: 'migration_required', command: 'cd backend && npm run migrate' });
     }
     res.json({ status: 'ready', timestamp: Date.now() });

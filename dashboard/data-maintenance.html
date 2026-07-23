@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Data Maintenance — Kanlungan Coffee Garage</title>
+  <meta name="description" content="Safely reset synchronized POS order and report history"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    [hidden]{display:none!important}.maintenance-intro{display:flex;gap:14px;align-items:flex-start}.maintenance-icon{width:44px;height:44px;display:grid;place-items:center;flex:none;border-radius:12px;color:var(--danger);background:rgba(192,57,43,.1)}.maintenance-icon svg,.nav-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.maintenance-intro p{max-width:760px;color:var(--text-muted);font-size:14px}.count-grid{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:12px;margin:20px 0}.count-card{padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)}.count-label{display:block;color:var(--text-muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}.count-value{display:block;margin-top:3px;font-size:25px;font-weight:800;font-variant-numeric:tabular-nums}.preserved-note{padding:15px;border:1px solid rgba(45,138,94,.3);border-radius:10px;background:rgba(45,138,94,.08);color:#216b49;font-size:13px;line-height:1.55}.readiness-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.readiness-summary{font-size:13px;color:var(--text-muted)}.readiness-summary strong{color:var(--text)}.device-state{display:inline-flex;align-items:center;gap:6px;font-weight:700}.device-state::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--danger)}.device-state.ready::before{background:var(--success)}.danger-zone{border-color:rgba(192,57,43,.35)}.danger-zone .card-header{padding-bottom:15px;border-bottom:1px solid rgba(192,57,43,.2)}.danger-title{color:var(--danger)}.danger-list{margin:0 0 18px 20px;color:var(--text-muted);font-size:13px}.danger-list li{margin:5px 0}.confirmation-field{max-width:520px}.confirmation-field label{display:block;margin-bottom:7px;font-size:13px;font-weight:700}.confirmation-field .input{width:100%;min-height:48px;font-size:16px}.field-help{margin-top:6px;color:var(--text-muted);font-size:12px}.stop-sales-check{display:flex;align-items:flex-start;gap:10px;max-width:660px;margin:18px 0;min-height:44px;cursor:pointer}.stop-sales-check input{width:20px;height:20px;margin-top:2px;accent-color:var(--danger)}.stop-sales-check span{font-size:13px}.danger-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.danger-actions .btn{min-height:46px}.maintenance-status{min-height:22px;font-size:13px}.maintenance-status.error{color:var(--danger)}.maintenance-status.success{color:var(--success)}.reset-dialog{width:min(520px,calc(100% - 32px));border:1px solid var(--border);border-radius:16px;padding:0;box-shadow:var(--shadow-lg);color:var(--text)}.reset-dialog::backdrop{background:rgba(26,26,26,.58)}.dialog-body{padding:26px}.dialog-body h2{color:var(--danger);margin-bottom:8px}.dialog-body p{color:var(--text-muted);font-size:14px}.dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}.btn-danger-solid{background:var(--danger);color:#fff}.btn-danger-solid:hover{background:#9f2f24}.input:focus-visible,.btn:focus-visible,input[type=checkbox]:focus-visible{outline:3px solid var(--accent-light);outline-offset:2px}@media(max-width:1000px){.count-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.count-grid{grid-template-columns:repeat(2,1fr)}.readiness-header,.danger-actions{align-items:stretch;flex-direction:column}.danger-actions .btn{width:100%;justify-content:center}.table-wrap{overflow-x:auto}.dialog-actions{flex-direction:column-reverse}.dialog-actions .btn{width:100%;justify-content:center;min-height:44px}}@media(max-width:400px){.count-grid{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){.fade-up{animation:none}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/><div class="sidebar-logo-text"><h2>Kanlungan<br/>Coffee Garage</h2><p>Admin Panel</p></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">◦</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">≡</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">↗</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">☕</span> Menu</a>
+      <a href="promotions.html" class="nav-item"><span class="nav-icon">◇</span> Promotions</a>
+      <a href="discounts.html" class="nav-item"><span class="nav-icon">%</span> Discount Settings</a>
+      <a href="payment-void-settings.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg></span> Payment &amp; Void Settings</a>
+      <a href="data-maintenance.html" class="nav-item active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span> Data Maintenance</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">♙</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">□</span> Inventory</a>
+      <a href="devices.html" class="nav-item"><span class="nav-icon">⌁</span> Cloud Devices</a>
+    </nav>
+    <div class="sidebar-footer"><span>Render Cloud</span><span class="sync-dot"></span></div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><div><h1>Data Maintenance</h1><div class="topbar-sub">Coordinated Render and POS history reset</div></div><div class="topbar-right"><span class="topbar-time" id="topbarTime"></span><button class="btn-logout" onclick="logout()">Sign Out</button></div></div>
+    <div class="content fade-up">
+      <section class="card" aria-labelledby="maintenanceHeading">
+        <div class="maintenance-intro"><span class="maintenance-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.8 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.8a2 2 0 0 0-3.4 0Z"/></svg></span><div><h2 id="maintenanceHeading" class="card-title">Operational history</h2><p>This permanent reset clears website and POS order/report history together. Every active device must have APK v1.9 and complete a successful sync first.</p></div></div>
+        <div id="countGrid" class="count-grid" aria-label="Records scheduled for deletion"><div class="loading"><span class="spinner"></span>Loading counts…</div></div>
+        <div class="preserved-note"><strong>Preserved:</strong> current stock quantities, inventory events, menu and recipes, employees, devices, discounts, payments settings, campaign settings, and the Promotion QR destination URL.</div>
+      </section>
+
+      <section class="card" aria-labelledby="deviceReadinessTitle">
+        <div class="card-header readiness-header"><div><h2 id="deviceReadinessTitle" class="card-title">POS readiness</h2><p class="readiness-summary" id="readinessSummary">Checking enrolled devices…</p></div><button class="btn btn-outline" id="refreshStatus">Refresh</button></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Device</th><th>Role</th><th>Status</th><th>Reset protocol</th><th>Generation</th></tr></thead><tbody id="deviceRows"><tr><td colspan="5"><div class="loading"><span class="spinner"></span>Loading devices…</div></td></tr></tbody></table></div>
+      </section>
+
+      <section class="card danger-zone" aria-labelledby="dangerTitle">
+        <div class="card-header"><div><h2 id="dangerTitle" class="card-title danger-title">Permanently reset order and report history</h2><p class="card-sub">This cannot be undone from the website.</p></div></div>
+        <ul class="danger-list"><li>Deletes all paid, voided, refunded, and open orders.</li><li>Deletes payments, receipts, shifts, report data, and Free Drink reward claims.</li><li>Resets promotion cycle progress and lifetime orders to zero.</li></ul>
+        <form id="resetForm" novalidate>
+          <div class="confirmation-field"><label for="confirmationPhrase">Type <strong>DELETE ALL ORDERS</strong></label><input class="input" id="confirmationPhrase" autocomplete="off" spellcheck="false" aria-describedby="confirmationHelp" required/><p id="confirmationHelp" class="field-help">The phrase must match exactly.</p></div>
+          <label class="stop-sales-check"><input type="checkbox" id="salesStopped"/><span><strong>Sales are stopped on every POS.</strong><br/>No tablet is taking offline orders during this reset.</span></label>
+          <div class="danger-actions"><button type="submit" class="btn btn-danger-solid" id="openResetDialog" disabled>Reset orders and reports</button><div id="maintenanceStatus" class="maintenance-status" role="status" aria-live="polite"></div></div>
+        </form>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog id="resetDialog" class="reset-dialog" aria-labelledby="resetDialogTitle">
+  <div class="dialog-body"><h2 id="resetDialogTitle">Final confirmation</h2><p>All synchronized order history and reward claims will be permanently deleted. Current stock and the Promotion QR destination URL will remain unchanged.</p><div class="dialog-actions"><button class="btn btn-outline" id="cancelReset">Cancel</button><button class="btn btn-danger-solid" id="confirmReset">Delete all order history</button></div></div>
+</dialog>
+
+<script src="js/api.js"></script><script src="js/auth.js"></script><script src="js/data-maintenance.js"></script>
+</body>
+</html>

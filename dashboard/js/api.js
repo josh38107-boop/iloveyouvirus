@@ -111,6 +111,10 @@ const api = {
   deletePaymentMethod: (id, expectedUpdatedAt) => apiFetch(`/admin/payment-void-settings/methods/${encodeURIComponent(id)}`, {
     method: 'DELETE', body: JSON.stringify({ expectedUpdatedAt })
   }),
+  getDataMaintenance: () => apiFetch('/admin/data-maintenance'),
+  resetOperationalData: (request) => apiFetch('/admin/data-maintenance/reset', {
+    method: 'POST', body: JSON.stringify(request)
+  }),
 
   // Table endpoints
   getMenuCategories: () => apiFetch('/admin/data/menu_category?select=*'),

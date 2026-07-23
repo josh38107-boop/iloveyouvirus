@@ -91,6 +91,20 @@ internal fun formatReceiptItemLines(
     return result
 }
 
+internal suspend fun clearOperationalHistoryPreservingInventory(database: AppDatabase) {
+    database.withTransaction {
+        val orderDao = database.orderDao()
+        database.inventoryDao().clearOrderInventoryAddOns()
+        orderDao.clearOrderLines()
+        orderDao.clearPayments()
+        orderDao.clearReceipts()
+        orderDao.clearOrders()
+        orderDao.clearStockSnapshots()
+        orderDao.clearClosedShiftAdjustments()
+        orderDao.clearShifts()
+    }
+}
+
 data class MenuCatalog(
     val categories: List<MenuCategory> = emptyList(),
     val items: List<MenuItem> = emptyList(),
@@ -1147,23 +1161,6 @@ class OrderRepository(
         syncManager?.let { manager ->
             CoroutineScope(Dispatchers.IO).launch { manager.syncNow() }
         }
-    }
-
-    suspend fun clearAllTransactions() = withContext(Dispatchers.IO) {
-        database.withTransaction {
-            val inventoryDao = database.inventoryDao()
-            inventoryDao.clearOrderInventoryAddOns()
-            orderDao.clearOrderLines()
-            orderDao.clearPayments()
-            orderDao.clearReceipts()
-            orderDao.clearOrders()
-            orderDao.clearStockSnapshots()
-            orderDao.clearClosedShiftAdjustments()
-            orderDao.clearAdjustments()
-            orderDao.clearShifts()
-            inventoryDao.resetAllQuantities()
-        }
-        syncManager?.clearOperationalSyncState()
     }
 
     companion object {

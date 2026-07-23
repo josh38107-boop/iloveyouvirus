@@ -20,3 +20,11 @@ test('cookie parser ignores malformed cookie fragments', () => {
   assert.equal(parsed.theme, 'light');
   assert.equal(parsed.bad, undefined);
 });
+
+test('reset protocol headers accept only non-negative safe integers', () => {
+  assert.equal(_test.nonNegativeHeader('3'), 3);
+  assert.equal(_test.nonNegativeHeader(0), 0);
+  assert.equal(_test.nonNegativeHeader('-1'), 0);
+  assert.equal(_test.nonNegativeHeader('not-a-number'), 0);
+  assert.equal(_test.nonNegativeHeader(Number.MAX_SAFE_INTEGER + 1), 0);
+});

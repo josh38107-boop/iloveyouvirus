@@ -193,7 +193,6 @@ data class PosUiState(
     val modifierOptionEditorIngredientId: String? = null,
     val modifierOptionEditorQty: String = "",
     val modifierOptionEditorReplacesId: String? = null,
-    val showResetConfirmDialog: Boolean = false,
     val showManagerAuthorityDialog: Boolean = false,
     val managerAuthorityPin: String = "",
     val managerAuthorityError: String? = null,
@@ -2314,31 +2313,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
     /** Called by the Manager screen to guarantee today's shift exists. */
     fun ensureTodayShift() {
         viewModelScope.launch {
-            container.shiftRepository.ensureTodayShift()
-        }
-    }
-
-    fun showResetConfirmDialog(show: Boolean) {
-        _uiState.update { it.copy(showResetConfirmDialog = show) }
-    }
-
-    fun truncateDailyReport() {
-        viewModelScope.launch {
-            val state = _uiState.value
-            if (!state.isManager) {
-                _uiState.update { it.copy(statusMessage = "Manager PIN required to reset reports.", showResetConfirmDialog = false) }
-                return@launch
-            }
-            container.orderRepository.clearAllTransactions()
-            _uiState.update {
-                it.copy(
-                    activeShift = null,
-                    orders = emptyList(),
-                    dailyReport = DailyReport(),
-                    statusMessage = "Orders, reports, shifts, and inventory quantities cleared successfully.",
-                    showResetConfirmDialog = false
-                )
-            }
             container.shiftRepository.ensureTodayShift()
         }
     }

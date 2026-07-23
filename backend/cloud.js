@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const express = require('express');
+const { RESET_PROTOCOL_VERSION } = require('./data-maintenance');
 
 const API_VERSION = '1.0.0';
 const BRANCH_ID = process.env.DEFAULT_BRANCH_ID || 'main';
@@ -49,6 +50,11 @@ function constantEqual(a, b) {
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
 }
 
+function nonNegativeHeader(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function parseCookies(req) {
   return Object.fromEntries(String(req.headers.cookie || '').split(';').map(part => part.trim()).filter(part => part.includes('=')).map(part => {
     const index = part.indexOf('=');
@@ -94,7 +100,8 @@ function createCloud(db) {
   async function findDeviceToken(token) {
     if (!token) return null;
     const result = await db.query(`
-      SELECT id, branch_id, hardware_id, name, role, status
+      SELECT id, branch_id, hardware_id, name, role, status,
+             reset_protocol_version, acknowledged_reset_generation
       FROM sync_device WHERE token_hash = $1 AND status = 'active' LIMIT 1
     `, [digest(token)]);
     return result.rows[0] || null;
@@ -109,8 +116,23 @@ function createCloud(db) {
     try {
       const device = await findDeviceToken(bearer(req));
       if (!device) return res.status(401).json({ error: 'Invalid or revoked device token' });
+      const protocolVersion = nonNegativeHeader(req.headers['x-reset-protocol-version']);
+      const reportedGeneration = nonNegativeHeader(req.headers['x-operational-reset-generation']);
+      await db.query(`INSERT INTO operational_reset_state(branch_id)
+        VALUES ($1) ON CONFLICT (branch_id) DO NOTHING`, [device.branch_id]);
+      const reset = await db.query(
+        'SELECT generation FROM operational_reset_state WHERE branch_id=$1 LIMIT 1',
+        [device.branch_id]
+      );
+      const currentGeneration = Number(reset.rows[0]?.generation || 0);
+      const safeAcknowledgement = Math.min(reportedGeneration, currentGeneration);
       req.syncDevice = device;
-      await db.query('UPDATE sync_device SET last_seen_at = $1 WHERE id = $2', [now(), device.id]);
+      req.currentResetGeneration = currentGeneration;
+      req.reportedResetGeneration = reportedGeneration;
+      await db.query(`UPDATE sync_device SET last_seen_at=$1,
+          reset_protocol_version=GREATEST(reset_protocol_version,$3),
+          acknowledged_reset_generation=GREATEST(acknowledged_reset_generation,$4)
+        WHERE id=$2`, [now(), device.id, protocolVersion, safeAcknowledgement]);
       next();
     } catch (error) { next(error); }
   }
@@ -260,7 +282,9 @@ function createCloud(db) {
     app.get('/admin/session', adminAuth, (req, res) => res.json({ authenticated: true, user: req.admin.sub }));
 
     app.get('/admin/devices', adminAuth, async (req, res, next) => {
-      try { res.json((await db.query(`SELECT id, branch_id, hardware_id, name, role, status, last_seen_at, created_at, revoked_at FROM sync_device ORDER BY created_at DESC`)).rows); }
+      try { res.json((await db.query(`SELECT id,branch_id,hardware_id,name,role,status,last_seen_at,
+          created_at,revoked_at,reset_protocol_version,acknowledged_reset_generation
+        FROM sync_device ORDER BY created_at DESC`)).rows); }
       catch (error) { next(error); }
     });
     app.post('/admin/enrollments', adminAuth, async (req, res, next) => {
@@ -325,6 +349,12 @@ function createCloud(db) {
       try { await db.query('SELECT 1'); res.json({ ok: true, serverVersion: API_VERSION, device: req.syncDevice, serverTime: now() }); }
       catch (error) { next(error); }
     });
+    app.get('/sync/v1/reset-state', deviceAuth, async (req, res) => {
+      res.json({
+        generation: req.currentResetGeneration,
+        protocolVersion: RESET_PROTOCOL_VERSION
+      });
+    });
     app.get('/sync/v1/bootstrap', deviceAuth, async (req, res, next) => {
       try {
         const catalog = {};
@@ -335,6 +365,7 @@ function createCloud(db) {
         operations.pos_order = await safeRows('SELECT * FROM pos_order WHERE created_at >= $1', [lookback]);
         const cursor = Number((await db.query('SELECT COALESCE(MAX(sequence),0) AS cursor FROM sync_change WHERE branch_id=$1', [req.syncDevice.branch_id])).rows[0].cursor);
         res.json({ serverVersion: API_VERSION, cursor, device: req.syncDevice, catalog, operations,
+          resetState: { generation: req.currentResetGeneration, protocolVersion: RESET_PROTOCOL_VERSION },
           inventoryBalances: await safeRows('SELECT ingredient_id, quantity FROM inventory_balance WHERE branch_id=$1', [req.syncDevice.branch_id]),
           tombstones: await safeRows('SELECT * FROM sync_tombstone WHERE branch_id=$1', [req.syncDevice.branch_id]) });
       } catch (error) { next(error); }
@@ -380,10 +411,28 @@ function createCloud(db) {
     app.post('/sync/v1/push', deviceAuth, async (req, res, next) => {
       const operations = Array.isArray(req.body?.operations) ? req.body.operations : [];
       if (!operations.length || operations.length > 100) return res.status(400).json({ error: 'Provide between 1 and 100 operations' });
+      if (req.reportedResetGeneration !== req.currentResetGeneration) {
+        return res.status(409).json({
+          error: 'This POS must apply the latest operational reset before uploading.',
+          code: 'OPERATIONAL_RESET_REQUIRED',
+          currentGeneration: req.currentResetGeneration
+        });
+      }
       let client;
       try {
         client = await db.pool.connect();
         await client.query('BEGIN');
+        const transactionReset = await client.query(
+          'SELECT generation FROM operational_reset_state WHERE branch_id=$1 FOR SHARE',
+          [req.syncDevice.branch_id]
+        );
+        const transactionGeneration = Number(transactionReset.rows[0]?.generation || 0);
+        if (req.reportedResetGeneration !== transactionGeneration) {
+          throw Object.assign(
+            new Error('This POS must apply the latest operational reset before uploading.'),
+            { status: 409, code: 'OPERATIONAL_RESET_REQUIRED' }
+          );
+        }
         const results = [];
         for (const operation of operations) {
           const mutationId = String(operation.mutationId || '');
@@ -450,5 +499,5 @@ function createCloud(db) {
 module.exports = {
   createCloud,
   TABLES,
-  _test: { constantEqual, makeAdminSession, verifyAdminSession, parseCookies }
+  _test: { constantEqual, makeAdminSession, verifyAdminSession, parseCookies, nonNegativeHeader }
 };
