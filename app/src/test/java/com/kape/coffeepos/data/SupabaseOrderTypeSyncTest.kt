@@ -36,6 +36,25 @@ class SupabaseOrderTypeSyncTest {
     }
 
     @Test
+    fun uploadPayloadPreservesDiscountAuditFields() {
+        val discounted = order("Take-Out").copy(
+            discountCents = 1500,
+            discountRuleId = "student",
+            discountCategory = "Student",
+            discountPercent = 10.0,
+            discountScope = "order",
+            discountReference = "ID-123"
+        )
+        val payload = posOrderUploadPayload(discounted, "tablet-1" to 42L)
+
+        assertEquals("student", payload["discount_rule_id"])
+        assertEquals("Student", payload["discount_category"])
+        assertEquals(10.0, payload["discount_percent"])
+        assertEquals("order", payload["discount_scope"])
+        assertEquals("ID-123", payload["discount_reference"])
+    }
+
+    @Test
     fun downloadedOrderAcceptsCloudOrderTypeCorrection() {
         assertTrue(
             shouldApplyRemoteOrderTypeCorrection(

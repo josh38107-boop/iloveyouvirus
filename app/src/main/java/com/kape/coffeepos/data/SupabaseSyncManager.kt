@@ -55,6 +55,11 @@ internal fun posOrderUploadPayload(
     "shift_device_id" to shiftSource.first,
     "subtotal_cents" to order.subtotalCents,
     "discount_cents" to order.discountCents,
+    "discount_rule_id" to order.discountRuleId,
+    "discount_category" to order.discountCategory,
+    "discount_percent" to order.discountPercent,
+    "discount_scope" to order.discountScope,
+    "discount_reference" to order.discountReference,
     "tax_cents" to order.taxCents,
     "tip_cents" to order.tipCents,
     "total_cents" to order.totalCents,
@@ -85,6 +90,13 @@ internal fun remoteInt(value: Any?, field: String): Int = remoteLong(value, fiel
 
 internal fun remoteIntOrNull(value: Any?, field: String): Int? =
     remoteLongOrNull(value, field)?.toInt()
+
+internal fun remoteDoubleOrNull(value: Any?, field: String): Double? = when (value) {
+    null -> null
+    is Number -> value.toDouble()
+    is String -> value.toDoubleOrNull()
+    else -> null
+} ?: throw IllegalArgumentException("Render returned a non-numeric value for '$field': $value")
 
 internal fun orderInventoryAddOnPayload(row: OrderInventoryAddOn): Map<String, Any> =
     mutableMapOf<String, Any>(
@@ -176,7 +188,13 @@ internal fun resolveRemoteStoreSettings(
     local: StoreSettings?,
     remote: StoreSettings,
     preserveLocalSettings: Boolean
-): StoreSettings = if (local != null && preserveLocalSettings) local else remote
+): StoreSettings = if (local != null && preserveLocalSettings) {
+    local.copy(
+        seniorDiscountPercent = remote.seniorDiscountPercent,
+        pwdDiscountPercent = remote.pwdDiscountPercent,
+        discountSettingsUpdatedAt = remote.discountSettingsUpdatedAt
+    )
+} else remote
 
 class SupabaseSyncManager(
     private val context: Context,
@@ -1210,7 +1228,16 @@ class SupabaseSyncManager(
             db.settingsDao().upsertPaymentMethods(remotePaymentMethods)
         }
 
-        // 10. Employees
+        // 10. Website-managed discount rules
+        val jsonDiscountRules = makeRequest("discount_rule?select=*&order=sort_order.asc", "GET")
+        val discountRuleType = object : TypeToken<List<DiscountRule>>() {}.type
+        val remoteDiscountRules: List<DiscountRule> = gson.fromJson(jsonDiscountRules, discountRuleType)
+        db.settingsDao().clearDiscountRules()
+        if (remoteDiscountRules.isNotEmpty()) {
+            db.settingsDao().upsertDiscountRules(remoteDiscountRules)
+        }
+
+        // 11. Employees
         val jsonEmployees = makeRequest("employee?select=*", "GET")
         val empType = object : TypeToken<List<Employee>>() {}.type
         val remoteEmployees: List<Employee> = gson.fromJson(jsonEmployees, empType)
@@ -1218,7 +1245,7 @@ class SupabaseSyncManager(
             db.employeeDao().upsertEmployees(remoteEmployees)
         }
 
-        // 11. Store Settings
+        // 12. Store Settings
         val jsonSettings = makeRequest("store_settings?select=*", "GET")
         val settingsType = object : TypeToken<List<Map<String, Any?>>>() {}.type
         val remoteSettings: List<Map<String, Any?>> = gson.fromJson(jsonSettings, settingsType)
@@ -1240,9 +1267,7 @@ class SupabaseSyncManager(
             "store_name" to settings.storeName,
             "tax_rate_percent" to settings.taxRatePercent,
             "tip_presets" to settings.tipPresets,
-            "receipt_footer" to settings.receiptFooter,
-            "senior_discount_percent" to settings.seniorDiscountPercent,
-            "pwd_discount_percent" to settings.pwdDiscountPercent
+            "receipt_footer" to settings.receiptFooter
         )
         if (includeVoidRefundPin) {
             row["void_refund_pin"] = settings.voidRefundPin
@@ -1267,6 +1292,9 @@ class SupabaseSyncManager(
             receiptFooter = stringValue("receipt_footer", localSettings?.receiptFooter ?: "Thanks for visiting Kanlungan."),
             seniorDiscountPercent = doubleValue("senior_discount_percent", localSettings?.seniorDiscountPercent ?: 20.0),
             pwdDiscountPercent = doubleValue("pwd_discount_percent", localSettings?.pwdDiscountPercent ?: 20.0),
+            discountSettingsUpdatedAt = (row["discount_settings_updated_at"] as? Number)?.toLong()
+                ?: localSettings?.discountSettingsUpdatedAt
+                ?: 0,
             voidRefundPin = stringValue("void_refund_pin", localSettings?.voidRefundPin ?: "1234")
         )
     }
@@ -1706,6 +1734,11 @@ class SupabaseSyncManager(
                 shiftId = localShiftId,
                 subtotalCents = subtotalCents,
                 discountCents = discountCents,
+                discountRuleId = rOrder["discount_rule_id"] as? String,
+                discountCategory = rOrder["discount_category"] as? String,
+                discountPercent = remoteDoubleOrNull(rOrder["discount_percent"], "pos_order.discount_percent"),
+                discountScope = rOrder["discount_scope"] as? String,
+                discountReference = rOrder["discount_reference"] as? String,
                 taxCents = taxCents,
                 tipCents = tipCents,
                 totalCents = totalCents,

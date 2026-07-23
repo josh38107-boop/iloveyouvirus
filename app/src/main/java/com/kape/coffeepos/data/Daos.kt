@@ -409,6 +409,18 @@ interface SettingsDao {
 
     @Query("DELETE FROM PaymentMethod WHERE id = :id")
     suspend fun deletePaymentMethod(id: String)
+
+    @Query("SELECT * FROM DiscountRule ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
+    fun discountRulesFlow(): Flow<List<DiscountRule>>
+
+    @Query("SELECT * FROM DiscountRule ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
+    suspend fun discountRulesNow(): List<DiscountRule>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertDiscountRules(rules: List<DiscountRule>)
+
+    @Query("DELETE FROM DiscountRule")
+    suspend fun clearDiscountRules()
 }
 
 @Dao

@@ -26,6 +26,7 @@
       <div class="nav-section" style="margin-top:12px">Manage</div>
       <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
       <a href="promotions.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 7v14M12 7H7.5a2.5 2.5 0 1 1 2.45-3c.5 1.5 2.05 3 2.05 3Zm0 0h4.5a2.5 2.5 0 1 0-2.45-3C13.55 5.5 12 7 12 7Z"/></svg></span> Promotions</a>
+      <a href="discounts.html" class="nav-item"><span class="nav-icon">%</span> Discount Settings</a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
       <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
       <a href="devices.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 8.5 4.75 4.75 0 0 0 7 18Z"/></svg></span> Cloud Devices</a>
@@ -69,6 +70,11 @@
 <script>
   requireAuth(); startClock();
   let page = 0; const PER_PAGE = 50;
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+  }
 
   async function loadOrders() {
     const el = document.getElementById('ordersTable');
@@ -85,7 +91,7 @@
     el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table">
       <thead><tr>
         <th>Order ID</th><th>Date & Time</th><th>Employee</th>
-        <th>Type</th><th>Items</th><th>Total</th><th>Status</th>
+        <th>Type</th><th>Customer</th><th>Discount</th><th>Total</th><th>Status</th>
       </tr></thead>
       <tbody>${orders.map(o => `
         <tr>
@@ -94,6 +100,10 @@
           <td>${o.employee_name || '—'}</td>
           <td><span class="badge badge-info">${o.order_type || 'Dine-In'}</span></td>
           <td style="font-size:13px;color:var(--text-muted);">${o.customer_name || '—'}</td>
+          <td style="font-size:12px;">${o.discount_cents > 0
+            ? `<strong>${escapeHtml(o.discount_category || 'Discount')}</strong><br/>
+               <span style="color:var(--text-muted);">${o.discount_percent == null ? '' : `${Number(o.discount_percent)}% · `}${escapeHtml(o.discount_scope || 'item')}${o.discount_reference ? `<br/>Ref: ${escapeHtml(o.discount_reference)}` : ''}</span>`
+            : '—'}</td>
           <td style="font-weight:700;color:var(--accent);">${formatPeso(o.total_cents)}</td>
           <td><span class="badge ${o.status==='paid'?'badge-success':o.status==='void'?'badge-danger':'badge-warning'}">${o.status}</span></td>
         </tr>`).join('')}

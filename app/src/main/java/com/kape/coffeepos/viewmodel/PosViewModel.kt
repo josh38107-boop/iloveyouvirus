@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.kape.coffeepos.AppContainer
 import com.kape.coffeepos.data.CartLine
 import com.kape.coffeepos.data.DailyReport
+import com.kape.coffeepos.data.DiscountRule
 import com.kape.coffeepos.data.ReportDateRange
 import com.kape.coffeepos.data.Employee
 import com.kape.coffeepos.data.Ingredient
@@ -29,6 +30,7 @@ import com.kape.coffeepos.data.PromotionClaim
 import com.kape.coffeepos.data.PromotionConfig
 import com.kape.coffeepos.data.PromotionResult
 import com.kape.coffeepos.data.calculateSingleItemDiscountCents
+import com.kape.coffeepos.data.calculateWholeOrderDiscountCents
 import com.kape.coffeepos.data.customReportRangeError
 import com.kape.coffeepos.data.normalizeIngredientId
 import com.kape.coffeepos.printer.DEFAULT_WINDOWS_BRIDGE_PRINT_URL
@@ -224,6 +226,7 @@ data class PosUiState(
     val selectedDiscountCategory: String = "None",
     val seniorPwdIdInput: String = "",
     val selectedDiscountLineId: String? = null,
+    val discountRules: List<DiscountRule> = emptyList(),
     val settingsFormSeniorPercent: String = "20.0",
     val settingsFormPwdPercent: String = "20.0",
     val discountSettingsError: String? = null,
@@ -276,6 +279,23 @@ data class PosUiState(
     val promotionAppliedClaimCode: String? = null
 ) {
     val isManager: Boolean get() = employee?.role == "manager"
+    val selectedCustomDiscount: DiscountRule?
+        get() = selectedDiscountCategory.removePrefix("RULE:")
+            .takeIf { selectedDiscountCategory.startsWith("RULE:") }
+            ?.let { id -> discountRules.firstOrNull { it.id == id && it.active } }
+    val selectedDiscountName: String
+        get() = selectedCustomDiscount?.name ?: selectedDiscountCategory
+    val selectedDiscountScope: String
+        get() = selectedCustomDiscount?.scope ?: "item"
+    val selectedDiscountRequiresReference: Boolean
+        get() = selectedDiscountCategory == "Senior" || selectedDiscountCategory == "PWD" ||
+            selectedCustomDiscount?.requiresReference == true
+    val selectedDiscountPercent: Double
+        get() = when (selectedDiscountCategory) {
+            "Senior" -> settings.seniorDiscountPercent
+            "PWD" -> settings.pwdDiscountPercent
+            else -> selectedCustomDiscount?.percent ?: 0.0
+        }
     val isReportRangeReady: Boolean get() = reportDateRange != ReportDateRange.CUSTOM || reportRangeError == null
     val totals = OrderRepository.calculateTotals(cart, discountCents, tipCents, settings.taxRatePercent)
 }
@@ -481,6 +501,26 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 _uiState.update { it.copy(paymentMethods = rows) }
             }
         }
+        viewModelScope.launch {
+            container.settingsRepository.discountRules.collect { rows ->
+                _uiState.update { state ->
+                    val activeRows = rows.filter { it.active }
+                    val selectedStillAvailable = !state.selectedDiscountCategory.startsWith("RULE:") ||
+                        activeRows.any { "RULE:${it.id}" == state.selectedDiscountCategory }
+                    if (selectedStillAvailable) {
+                        state.copy(discountRules = rows)
+                    } else {
+                        state.copy(
+                            discountRules = rows,
+                            selectedDiscountCategory = "None",
+                            seniorPwdIdInput = "",
+                            selectedDiscountLineId = null,
+                            discountCents = 0
+                        )
+                    }
+                }
+            }
+        }
         changeReportDateRange(ReportDateRange.TODAY)
         refreshPrinterDevices()
         refreshPromotionConfig()
@@ -550,7 +590,12 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 paymentError = null
             )
         }
-        if (screen == AppScreen.SETTINGS || screen == AppScreen.POS) refreshPromotionConfig()
+        if (screen == AppScreen.SETTINGS || screen == AppScreen.POS) {
+            refreshPromotionConfig()
+            if (container.supabaseSyncManager.isConfigured()) {
+                viewModelScope.launch { container.supabaseSyncManager.syncNow() }
+            }
+        }
     }
 
     fun refreshPrinterDevices() {
@@ -1381,7 +1426,10 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         when (category) {
             "Senior" -> state.settings.seniorDiscountPercent
             "PWD" -> state.settings.pwdDiscountPercent
-            else -> 0.0
+            else -> category.removePrefix("RULE:")
+                .takeIf { category.startsWith("RULE:") }
+                ?.let { id -> state.discountRules.firstOrNull { it.id == id && it.active }?.percent }
+                ?: 0.0
         }
 
     private fun recalculateSelectedItemDiscount(
@@ -1389,32 +1437,55 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         cart: List<CartLine> = state.cart,
         selectedLineId: String? = state.selectedDiscountLineId,
         category: String = state.selectedDiscountCategory
-    ): Int = calculateSingleItemDiscountCents(
-        lines = cart,
-        cartLineId = selectedLineId,
-        percent = benefitDiscountPercent(state, category)
-    )
+    ): Int {
+        val rule = category.removePrefix("RULE:")
+            .takeIf { category.startsWith("RULE:") }
+            ?.let { id -> state.discountRules.firstOrNull { it.id == id && it.active } }
+        return if (rule?.scope == "order") {
+            calculateWholeOrderDiscountCents(cart, rule.percent)
+        } else {
+            calculateSingleItemDiscountCents(
+                lines = cart,
+                cartLineId = selectedLineId,
+                percent = benefitDiscountPercent(state, category)
+            )
+        }
+    }
 
     private fun currentItemDiscount(state: PosUiState): ItemDiscountSelection? {
-        val lineId = state.selectedDiscountLineId ?: return null
+        val lineId = state.selectedDiscountLineId
         if (state.selectedDiscountCategory == "PROMO_FREE_DRINK") {
-            val basePrice = state.cart.firstOrNull { it.id == lineId }?.item?.basePriceCents ?: return null
+            val promotionLineId = lineId ?: return null
+            val basePrice = state.cart.firstOrNull { it.id == promotionLineId }?.item?.basePriceCents ?: return null
             return ItemDiscountSelection(
-                cartLineId = lineId,
+                cartLineId = promotionLineId,
                 category = "PROMO_FREE_DRINK",
                 percent = 0.0,
                 discountCents = basePrice
             )
         }
-        if (state.selectedDiscountCategory != "Senior" && state.selectedDiscountCategory != "PWD") return null
+        val customRule = state.selectedCustomDiscount
+        if (state.selectedDiscountCategory != "Senior" &&
+            state.selectedDiscountCategory != "PWD" &&
+            customRule == null
+        ) return null
         val percent = benefitDiscountPercent(state)
-        val cents = calculateSingleItemDiscountCents(state.cart, lineId, percent)
+        val scope = customRule?.scope ?: "item"
+        val cents = if (scope == "order") {
+            calculateWholeOrderDiscountCents(state.cart, percent)
+        } else {
+            if (lineId == null) return null
+            calculateSingleItemDiscountCents(state.cart, lineId, percent)
+        }
         if (cents <= 0) return null
         return ItemDiscountSelection(
-            cartLineId = lineId,
-            category = state.selectedDiscountCategory,
+            cartLineId = if (scope == "item") lineId else null,
+            category = customRule?.name ?: state.selectedDiscountCategory,
             percent = percent,
-            discountCents = cents
+            discountCents = cents,
+            ruleId = customRule?.id,
+            scope = scope,
+            reference = state.seniorPwdIdInput.trim().ifBlank { null }
         )
     }
 
@@ -1530,19 +1601,15 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 employee == null -> _uiState.update { it.copy(statusMessage = "Sign in before checkout.") }
                 shift == null -> _uiState.update { it.copy(statusMessage = "No active shift. Please open a shift before checking out.") }
                 state.cart.isEmpty() -> _uiState.update { it.copy(statusMessage = "Cart is empty.") }
-                state.selectedDiscountCategory in setOf("Senior", "PWD") && state.seniorPwdIdInput.isBlank() ->
-                    _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountCategory} ID number.") }
-                state.selectedDiscountCategory != "None" && state.selectedDiscountLineId == null ->
-                    _uiState.update { it.copy(paymentError = "Choose one item for the ${state.selectedDiscountCategory} discount.") }
+                state.selectedDiscountRequiresReference && state.seniorPwdIdInput.isBlank() ->
+                    _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountName} ID or reference number.") }
+                state.selectedDiscountCategory != "None" &&
+                    state.selectedDiscountScope == "item" &&
+                    state.selectedDiscountLineId == null ->
+                    _uiState.update { it.copy(paymentError = "Choose one item for the ${state.selectedDiscountName} discount.") }
                 else -> {
                     val profile = container.printerManager.printerProfile
                     val lineChars = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
-                      val finalCustomerName = if (state.selectedDiscountCategory != "None" && state.seniorPwdIdInput.isNotBlank()) {
-                        val suffix = "${state.selectedDiscountCategory} ID: ${state.seniorPwdIdInput}"
-                        if (state.customerNameInput.isNotBlank()) "${state.customerNameInput} ($suffix)" else suffix
-                    } else {
-                        state.customerNameInput
-                    }
                     val order = container.orderRepository.checkoutSplit(
                         employee = employee,
                         shift = shift,
@@ -1551,7 +1618,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                         tipCents = state.tipCents,
                         cashAmountCents = cashPaidCents,
                         gcashAmountCents = gcashPaidCents,
-                        customerName = finalCustomerName,
+                        customerName = state.customerNameInput,
                         tableNumber = state.tableNumberInput,
                         orderType = state.orderTypeInput,
                         lineCharacters = lineChars
@@ -1914,19 +1981,15 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     _uiState.update { it.copy(statusMessage = "No active shift. Please open a shift before checking out.") }
                 }
                 state.cart.isEmpty() -> _uiState.update { it.copy(statusMessage = "Cart is empty.") }
-                state.selectedDiscountCategory in setOf("Senior", "PWD") && state.seniorPwdIdInput.isBlank() ->
-                    _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountCategory} ID number.") }
-                state.selectedDiscountCategory != "None" && state.selectedDiscountLineId == null ->
-                    _uiState.update { it.copy(paymentError = "Choose one item for the ${state.selectedDiscountCategory} discount.") }
+                state.selectedDiscountRequiresReference && state.seniorPwdIdInput.isBlank() ->
+                    _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountName} ID or reference number.") }
+                state.selectedDiscountCategory != "None" &&
+                    state.selectedDiscountScope == "item" &&
+                    state.selectedDiscountLineId == null ->
+                    _uiState.update { it.copy(paymentError = "Choose one item for the ${state.selectedDiscountName} discount.") }
                 else -> {
                     val profile = container.printerManager.printerProfile
                     val lineChars = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
-                    val finalCustomerName = if (state.selectedDiscountCategory != "None" && state.seniorPwdIdInput.isNotBlank()) {
-                        val suffix = "${state.selectedDiscountCategory} ID: ${state.seniorPwdIdInput}"
-                        if (state.customerNameInput.isNotBlank()) "${state.customerNameInput} ($suffix)" else suffix
-                    } else {
-                        state.customerNameInput
-                    }
                     val order = container.orderRepository.checkout(
                         employee = employee,
                         shift = shift,
@@ -1939,7 +2002,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                             ?.paymentCategory
                             ?: PaymentCategories.fromLegacyMethod(paymentMethod),
                         amountTenderedCents = amountTenderedCents,
-                        customerName = finalCustomerName,
+                        customerName = state.customerNameInput,
                         tableNumber = state.tableNumberInput,
                         orderType = state.orderTypeInput,
                         lineCharacters = lineChars
@@ -2738,14 +2801,22 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 "PWD" -> state.settings.pwdDiscountPercent
                 else -> 0.0
             }
-            val selectedLineId = if (category == "None") null else state.selectedDiscountLineId
-            val discountCents = calculateSingleItemDiscountCents(state.cart, selectedLineId, cleanPct)
+            val customRule = category.removePrefix("RULE:")
+                .takeIf { category.startsWith("RULE:") }
+                ?.let { id -> state.discountRules.firstOrNull { it.id == id && it.active } }
+            val resolvedPercent = customRule?.percent ?: cleanPct
+            val selectedLineId = if (category == "None" || customRule?.scope == "order") null else state.selectedDiscountLineId
+            val discountCents = if (customRule?.scope == "order") {
+                calculateWholeOrderDiscountCents(state.cart, resolvedPercent)
+            } else {
+                calculateSingleItemDiscountCents(state.cart, selectedLineId, resolvedPercent)
+            }
             state.copy(
                 selectedDiscountCategory = category,
                 seniorPwdIdInput = if (category == "None") "" else state.seniorPwdIdInput,
                 selectedDiscountLineId = selectedLineId,
                 discountType = "percent",
-                discountInput = cleanPct.toString(),
+                discountInput = resolvedPercent.toString(),
                 discountCents = discountCents,
                 paymentError = null
             )

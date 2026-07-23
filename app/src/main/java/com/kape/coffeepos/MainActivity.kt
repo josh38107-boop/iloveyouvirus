@@ -1226,6 +1226,7 @@ private fun PromotionClaimDialog(state: PosUiState, viewModel: PosViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
     if (!state.showOrderSummary) return
@@ -1303,103 +1304,103 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
-                        Row(
+                        FlowRow(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            listOf("None" to "None", "Senior" to "Senior Citizen", "PWD" to "PWD").forEach { (cat, label) ->
-                                val pctLabel = when (cat) {
-                                    "Senior" -> " (${state.settings.seniorDiscountPercent.toString().removeSuffix(".0")}%)"
-                                    "PWD" -> " (${state.settings.pwdDiscountPercent.toString().removeSuffix(".0")}%)"
-                                    else -> ""
+                            buildList {
+                                add("None" to "None")
+                                add("Senior" to "Senior Citizen (${state.settings.seniorDiscountPercent.toString().removeSuffix(".0")}%)")
+                                add("PWD" to "PWD (${state.settings.pwdDiscountPercent.toString().removeSuffix(".0")}%)")
+                                state.discountRules.filter { it.active }.forEach { rule ->
+                                    add("RULE:${rule.id}" to "${rule.name} (${rule.percent.toString().removeSuffix(".0")}%)")
                                 }
+                            }.forEach { (cat, label) ->
                                 FilterChip(
                                     selected = state.selectedDiscountCategory == cat,
                                     onClick = { viewModel.selectDiscountCategory(cat) },
                                     enabled = state.promotionReservationToken == null,
-                                    label = { Text(label + pctLabel) }
+                                    label = { Text(label) }
                                 )
                             }
                         }
-                        if (state.selectedDiscountCategory != "None") {
+                        if (state.selectedDiscountCategory != "None" &&
+                            state.selectedDiscountCategory != "PROMO_FREE_DRINK"
+                        ) {
                             OutlinedTextField(
                                 value = state.seniorPwdIdInput,
                                 onValueChange = viewModel::updateSeniorPwdIdInput,
-                                label = { Text("${state.selectedDiscountCategory} ID Number (Required)") },
+                                label = {
+                                    Text(
+                                        "${state.selectedDiscountName} ID / Reference" +
+                                            if (state.selectedDiscountRequiresReference) " (Required)" else " (Optional)"
+                                    )
+                                },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text(
-                                "Choose item for discount (Required)",
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                            val discountPercent = if (state.selectedDiscountCategory == "Senior") {
-                                state.settings.seniorDiscountPercent
+                            if (state.selectedDiscountScope == "order") {
+                                Text(
+                                    "Applies to the whole order: -${money(state.discountCents)}",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             } else {
-                                state.settings.pwdDiscountPercent
-                            }
-                            state.cart.forEach { line ->
-                                val selected = state.selectedDiscountLineId == line.id
-                                val expectedDiscount = (line.unitPriceCents * discountPercent / 100.0).roundToInt()
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 56.dp)
-                                        .clickable { viewModel.selectDiscountLine(line.id) },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (selected) {
-                                            MaterialTheme.colorScheme.primaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                        }
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                Text(
+                                    "Choose item for discount (Required)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                                state.cart.forEach { line ->
+                                    val selected = state.selectedDiscountLineId == line.id
+                                    val expectedDiscount = (line.unitPriceCents * state.selectedDiscountPercent / 100.0).roundToInt()
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 56.dp)
+                                            .clickable { viewModel.selectDiscountLine(line.id) },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        RadioButton(selected = selected, onClick = null)
-                                        Column(Modifier.weight(1f)) {
-                                            Text(
-                                                if (line.quantity > 1) {
-                                                    "1 of ${line.quantity} × ${line.item.name}"
-                                                } else {
-                                                    "1 × ${line.item.name}"
-                                                },
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                            if (line.modifierLabel.isNotBlank()) {
-                                                Text(line.modifierLabel, style = MaterialTheme.typography.bodySmall)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(selected = selected, onClick = null)
+                                            Column(Modifier.weight(1f)) {
+                                                Text(
+                                                    if (line.quantity > 1) "1 of ${line.quantity} × ${line.item.name}"
+                                                    else "1 × ${line.item.name}",
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                if (line.modifierLabel.isNotBlank()) {
+                                                    Text(line.modifierLabel, style = MaterialTheme.typography.bodySmall)
+                                                }
+                                                Text("One unit: ${money(line.unitPriceCents)}", style = MaterialTheme.typography.bodySmall)
                                             }
-                                            Text(
-                                                "One unit: ${money(line.unitPriceCents)}",
-                                                style = MaterialTheme.typography.bodySmall
-                                            )
+                                            Text("-${money(expectedDiscount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
-                                        Text(
-                                            "-${money(expectedDiscount)}",
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
                                     }
                                 }
-                            }
-                            if (state.selectedDiscountLineId == null) {
-                                Text(
-                                    "Select the item for the customer's personal consumption.",
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                if (state.selectedDiscountLineId == null) {
+                                    Text(
+                                        "Select the item for the customer's personal consumption.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
                     }
 
                     if (state.discountCents > 0) {
                         TotalRow("Subtotal", totals.subtotalCents)
-                        val discountLabel = if (state.selectedDiscountCategory == "PROMO_FREE_DRINK") "Free Drink Reward" else state.selectedDiscountCategory
+                        val discountLabel = if (state.selectedDiscountCategory == "PROMO_FREE_DRINK") "Free Drink Reward" else state.selectedDiscountName
                         TotalRow("Discount ($discountLabel)", -state.discountCents)
                     }
 
@@ -1493,7 +1494,8 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                     val checkoutEnabled = when (state.selectedDiscountCategory) {
                         "None" -> true
                         "PROMO_FREE_DRINK" -> state.promotionReservationToken != null && state.selectedDiscountLineId != null
-                        else -> state.seniorPwdIdInput.isNotBlank() && state.selectedDiscountLineId != null
+                        else -> (!state.selectedDiscountRequiresReference || state.seniorPwdIdInput.isNotBlank()) &&
+                            (state.selectedDiscountScope == "order" || state.selectedDiscountLineId != null)
                     }
                     Button(
                         onClick = viewModel::confirmCheckout,
@@ -2297,6 +2299,19 @@ private fun OrdersScreen(state: PosUiState, viewModel: PosViewModel) {
                                     .orEmpty()
                                 Text("Order ${order.id.take(8).uppercase()}$paymentLabel$statusSuffix", fontWeight = FontWeight.Bold, color = if (order.status == "void" || order.status == "refunded") Color.Red else Color.Black)
                                 Text("Shift #${order.shiftId}   -   ${date(order.createdAt)}")
+                                if (order.discountCents > 0) {
+                                    val percent = order.discountPercent?.let {
+                                        val formatted = if (it % 1.0 == 0.0) it.toInt().toString()
+                                        else String.format(Locale.US, "%.2f", it).trimEnd('0').trimEnd('.')
+                                        " · $formatted%"
+                                    }.orEmpty()
+                                    Text(
+                                        "${order.discountCategory ?: "Discount"}$percent · -${money(order.discountCents)}" +
+                                            (order.discountReference?.let { " · Ref: $it" } ?: ""),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -3753,45 +3768,6 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                             }
                         }
                     }
-                }
-            }
-        }
-
-        Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Senior Citizen & PWD Discount Settings", fontWeight = FontWeight.Bold)
-                Text(
-                    text = "Configure the standard discount percentage applied at checkout.",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = state.settingsFormSeniorPercent,
-                        onValueChange = viewModel::updateSeniorDiscountPercent,
-                        label = { Text("Senior Discount (%)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = state.settingsFormPwdPercent,
-                        onValueChange = viewModel::updatePwdDiscountPercent,
-                        label = { Text("PWD Discount (%)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                state.discountSettingsError?.let { error ->
-                    Text(error, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                }
-                Button(
-                    onClick = viewModel::saveDiscountSettings,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("Save Discounts")
                 }
             }
         }

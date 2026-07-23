@@ -80,10 +80,13 @@ data class CartTotals(
 )
 
 internal data class ItemDiscountSelection(
-    val cartLineId: String,
+    val cartLineId: String?,
     val category: String,
     val percent: Double,
-    val discountCents: Int
+    val discountCents: Int,
+    val ruleId: String? = null,
+    val scope: String = "item",
+    val reference: String? = null
 )
 
 internal fun calculateSingleItemDiscountCents(
@@ -101,6 +104,31 @@ internal fun calculateSingleItemDiscountCents(
 internal fun calculatePromotionBaseDiscountCents(lines: List<CartLine>, cartLineId: String?): Int {
     if (cartLineId == null) return 0
     return lines.firstOrNull { it.id == cartLineId }?.item?.basePriceCents?.coerceAtLeast(0) ?: 0
+}
+
+internal fun calculateWholeOrderDiscountCents(lines: List<CartLine>, percent: Double): Int {
+    if (percent <= 0.0) return 0
+    val subtotal = lines.sumOf { it.lineTotalCents }
+    return (subtotal * percent / 100.0).roundToInt().coerceIn(0, subtotal)
+}
+
+private fun normalizeAppliedDiscount(
+    lines: List<CartLine>,
+    selection: ItemDiscountSelection?
+): ItemDiscountSelection? {
+    val selected = selection
+        ?.takeIf {
+            it.category == "Senior" || it.category == "PWD" ||
+                it.category == "PROMO_FREE_DRINK" || it.ruleId != null
+        }
+        ?: return null
+    val cents = when {
+        selected.category == "PROMO_FREE_DRINK" ->
+            selected.discountCents.coerceIn(0, calculatePromotionBaseDiscountCents(lines, selected.cartLineId))
+        selected.scope == "order" -> calculateWholeOrderDiscountCents(lines, selected.percent)
+        else -> calculateSingleItemDiscountCents(lines, selected.cartLineId, selected.percent)
+    }
+    return selected.copy(discountCents = cents).takeIf { cents > 0 }
 }
 
 data class ShiftOpenResult(
@@ -620,6 +648,7 @@ class SettingsRepository(
         dao.upsert(settings)
     }
     val paymentMethods: Flow<List<PaymentMethod>> = dao.paymentMethodsFlow()
+    val discountRules: Flow<List<DiscountRule>> = dao.discountRulesFlow()
     suspend fun paymentMethodsNow(): List<PaymentMethod> = withContext(Dispatchers.IO) {
         dao.paymentMethodsNow()
     }
@@ -667,17 +696,8 @@ class OrderRepository(
     ): PosOrder = withContext(Dispatchers.IO) {
         val settings = settingsRepository.settingsNow()
         val isComp = paymentMethod.lowercase(Locale.US) == "complimentary"
-        val appliedItemDiscount = itemDiscount
-            ?.takeIf { it.category == "Senior" || it.category == "PWD" || it.category == "PROMO_FREE_DRINK" }
-            ?.let {
-                if (it.category == "PROMO_FREE_DRINK") {
-                    val basePrice = calculatePromotionBaseDiscountCents(lines, it.cartLineId)
-                    it.copy(discountCents = it.discountCents.coerceIn(0, basePrice))
-                } else {
-                    it.copy(discountCents = calculateSingleItemDiscountCents(lines, it.cartLineId, it.percent))
-                }
-            }
-            ?.takeIf { it.discountCents > 0 && !isComp }
+        val appliedItemDiscount = normalizeAppliedDiscount(lines, itemDiscount)
+            ?.takeIf { !isComp }
         val totals = calculateTotals(lines, appliedItemDiscount?.discountCents ?: 0, tipCents, settings.taxRatePercent)
         val changeCents = (amountTenderedCents - totals.totalCents).coerceAtLeast(0)
         val orderId = UUID.randomUUID().toString()
@@ -689,6 +709,13 @@ class OrderRepository(
             shiftId = shift.id,
             subtotalCents = if (isComp) 0 else totals.subtotalCents,
             discountCents = if (isComp) 0 else totals.discountCents,
+            discountRuleId = if (isComp) null else appliedItemDiscount?.ruleId,
+            discountCategory = if (isComp) null else appliedItemDiscount?.let {
+                if (it.category == "PROMO_FREE_DRINK") "Free Drink Reward" else it.category
+            },
+            discountPercent = if (isComp || appliedItemDiscount?.category == "PROMO_FREE_DRINK") null else appliedItemDiscount?.percent,
+            discountScope = if (isComp) null else appliedItemDiscount?.scope,
+            discountReference = if (isComp) null else appliedItemDiscount?.reference?.ifBlank { null },
             taxCents = if (isComp) 0 else totals.taxCents,
             tipCents = if (isComp) 0 else totals.tipCents,
             totalCents = if (isComp) 0 else totals.totalCents,
@@ -701,7 +728,9 @@ class OrderRepository(
         orderDao.insertOrder(order)
         orderDao.insertLines(
             lines.map {
-                val lineDiscount = appliedItemDiscount?.takeIf { selection -> selection.cartLineId == it.id }
+                val lineDiscount = appliedItemDiscount?.takeIf { selection ->
+                    selection.scope == "item" && selection.cartLineId == it.id
+                }
                 OrderLine(
                     orderId = orderId,
                     itemId = it.item.id,
@@ -769,17 +798,7 @@ class OrderRepository(
         lineCharacters: Int = 32
     ): PosOrder = withContext(Dispatchers.IO) {
         val settings = settingsRepository.settingsNow()
-        val appliedItemDiscount = itemDiscount
-            ?.takeIf { it.category == "Senior" || it.category == "PWD" || it.category == "PROMO_FREE_DRINK" }
-            ?.let {
-                if (it.category == "PROMO_FREE_DRINK") {
-                    val basePrice = calculatePromotionBaseDiscountCents(lines, it.cartLineId)
-                    it.copy(discountCents = it.discountCents.coerceIn(0, basePrice))
-                } else {
-                    it.copy(discountCents = calculateSingleItemDiscountCents(lines, it.cartLineId, it.percent))
-                }
-            }
-            ?.takeIf { it.discountCents > 0 }
+        val appliedItemDiscount = normalizeAppliedDiscount(lines, itemDiscount)
         val totals = calculateTotals(lines, appliedItemDiscount?.discountCents ?: 0, tipCents, settings.taxRatePercent)
         val orderId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -795,6 +814,15 @@ class OrderRepository(
             shiftId = shift.id,
             subtotalCents = totals.subtotalCents,
             discountCents = totals.discountCents,
+            discountRuleId = appliedItemDiscount?.ruleId,
+            discountCategory = appliedItemDiscount?.let {
+                if (it.category == "PROMO_FREE_DRINK") "Free Drink Reward" else it.category
+            },
+            discountPercent = appliedItemDiscount
+                ?.takeUnless { it.category == "PROMO_FREE_DRINK" }
+                ?.percent,
+            discountScope = appliedItemDiscount?.scope,
+            discountReference = appliedItemDiscount?.reference?.ifBlank { null },
             taxCents = totals.taxCents,
             tipCents = totals.tipCents,
             totalCents = totals.totalCents,
@@ -807,7 +835,9 @@ class OrderRepository(
         orderDao.insertOrder(order)
         orderDao.insertLines(
             lines.map {
-                val lineDiscount = appliedItemDiscount?.takeIf { selection -> selection.cartLineId == it.id }
+                val lineDiscount = appliedItemDiscount?.takeIf { selection ->
+                    selection.scope == "item" && selection.cartLineId == it.id
+                }
                 OrderLine(
                     orderId = orderId,
                     itemId = it.item.id,
@@ -1171,7 +1201,12 @@ class OrderRepository(
             // Totals breakdown
             if (order.discountCents > 0) {
                 sb.appendLine(row("Subtotal", formatPeso(order.subtotalCents)))
-                sb.appendLine(row("Discount", "-${formatPeso(order.discountCents)}"))
+                val discountLabel = order.discountCategory?.let { "$it discount" } ?: "Discount"
+                sb.appendLine(row(discountLabel, "-${formatPeso(order.discountCents)}"))
+                order.discountPercent?.let {
+                    sb.appendLine("  ${formatDiscountPercent(it)}% · ${order.discountScope ?: "item"}")
+                }
+                order.discountReference?.let { sb.appendLine("  Reference: $it") }
             }
             sb.appendLine(row("TOTAL", formatPeso(order.totalCents)))
             sb.appendLine(div)
@@ -1245,7 +1280,12 @@ class OrderRepository(
             sb.appendLine(div)
             if (order.discountCents > 0) {
                 sb.appendLine(row("Subtotal", formatPeso(order.subtotalCents)))
-                sb.appendLine(row("Discount", "-${formatPeso(order.discountCents)}"))
+                val discountLabel = order.discountCategory?.let { "$it discount" } ?: "Discount"
+                sb.appendLine(row(discountLabel, "-${formatPeso(order.discountCents)}"))
+                order.discountPercent?.let {
+                    sb.appendLine("  ${formatDiscountPercent(it)}% · ${order.discountScope ?: "item"}")
+                }
+                order.discountReference?.let { sb.appendLine("  Reference: $it") }
             }
             sb.appendLine(row("TOTAL", formatPeso(order.totalCents)))
             sb.appendLine(div)
@@ -1263,6 +1303,9 @@ class OrderRepository(
         }
 
         private fun formatPeso(cents: Int): String = "₱" + String.format(Locale.US, "%,.2f", cents / 100.0)
+        private fun formatDiscountPercent(percent: Double): String =
+            if (percent % 1.0 == 0.0) percent.toInt().toString()
+            else String.format(Locale.US, "%.2f", percent).trimEnd('0').trimEnd('.')
     }
 }
 

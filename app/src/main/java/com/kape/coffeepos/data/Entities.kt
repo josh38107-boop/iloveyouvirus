@@ -151,6 +151,11 @@ data class PosOrder(
     val shiftId: Long,
     val subtotalCents: Int,
     val discountCents: Int,
+    val discountRuleId: String? = null,
+    val discountCategory: String? = null,
+    val discountPercent: Double? = null,
+    val discountScope: String? = null,
+    val discountReference: String? = null,
     val taxCents: Int,
     val tipCents: Int,
     val totalCents: Int,
@@ -205,6 +210,7 @@ data class StoreSettings(
     val receiptFooter: String,
     val seniorDiscountPercent: Double = 20.0,
     val pwdDiscountPercent: Double = 20.0,
+    val discountSettingsUpdatedAt: Long = 0,
     val voidRefundPin: String = "1234"
 )
 
@@ -222,6 +228,19 @@ data class PaymentMethod(
     val enabled: Boolean = true,
     val isSystem: Boolean = false,
     val paymentCategory: String? = null
+)
+
+@Entity
+data class DiscountRule(
+    @PrimaryKey val id: String,
+    val name: String,
+    val percent: Double,
+    val scope: String,
+    val requiresReference: Boolean = false,
+    val active: Boolean = true,
+    val sortOrder: Int = 0,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0
 )
 
 object PaymentCategories {

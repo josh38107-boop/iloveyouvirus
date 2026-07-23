@@ -27,6 +27,7 @@
       <div class="nav-section" style="margin-top:12px">Manage</div>
       <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
       <a href="promotions.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 7v14M12 7H7.5a2.5 2.5 0 1 1 2.45-3c.5 1.5 2.05 3 2.05 3Zm0 0h4.5a2.5 2.5 0 1 0-2.45-3C13.55 5.5 12 7 12 7Z"/></svg></span> Promotions</a>
+      <a href="discounts.html" class="nav-item"><span class="nav-icon">%</span> Discount Settings</a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
       <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
       <a href="devices.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 8.5 4.75 4.75 0 0 0 7 18Z"/></svg></span> Cloud Devices</a>
@@ -79,6 +80,11 @@
           <canvas id="ordersChart"></canvas>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">Discount Usage</div><div class="card-sub">Discounted orders and total amount granted</div></div></div>
+        <div id="discountBreakdown" aria-live="polite" style="overflow-x:auto;"><div class="loading"><span class="spinner"></span>Loading discounts…</div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -93,8 +99,9 @@
   async function loadReports() {
     const days = parseInt(document.getElementById('periodSelect').value);
     document.getElementById('chartSubtitle').textContent = days === 1 ? 'Today' : `Last ${days} days`;
-    reportData = await api.getSales(days);
-    if (!reportData) return;
+    const [sales, stats] = await Promise.all([api.getSales(days), api.getStats(days)]);
+    reportData = sales;
+    if (!reportData || !stats) return;
 
     const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue||0), 0);
     const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders||0), 0);
@@ -105,6 +112,40 @@
     document.getElementById('rOrders').textContent = totalOrders.toLocaleString();
     document.getElementById('rAvgDay').textContent = formatPeso(avgDay);
     document.getElementById('rBestDay').textContent = formatPeso(bestDay);
+
+    const discountContainer = document.getElementById('discountBreakdown');
+    discountContainer.replaceChildren();
+    if (!stats.discountBreakdown?.length) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No discounts were used in this period.';
+      discountContainer.append(empty);
+    } else {
+      const table = document.createElement('table');
+      table.className = 'data-table';
+      const head = table.createTHead().insertRow();
+      for (const label of ['Discount', 'Scope', 'Orders', 'Amount']) {
+        const cell = document.createElement('th');
+        cell.textContent = label;
+        head.append(cell);
+      }
+      const body = table.createTBody();
+      for (const row of stats.discountBreakdown) {
+        const tr = body.insertRow();
+        const values = [
+          row.name,
+          row.scope === 'order' ? 'Whole order' : 'One item',
+          Number(row.order_count).toLocaleString(),
+          formatPeso(Number(row.amount_cents))
+        ];
+        values.forEach((value, index) => {
+          const cell = tr.insertCell();
+          cell.textContent = value;
+          if (index === 3) cell.style.fontWeight = '700';
+        });
+      }
+      discountContainer.append(table);
+    }
 
     // Revenue chart
     if (revenueChartInst) revenueChartInst.destroy();

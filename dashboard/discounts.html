@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Discount Settings — Kanlungan Coffee Garage</title>
+  <meta name="description" content="Manage Senior Citizen, PWD, and custom POS discounts"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    [hidden] { display:none !important; }
+    .settings-heading { display:flex; align-items:flex-start; gap:14px; }
+    .settings-mark { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; color:var(--accent2); background:var(--accent-light); flex:none; }
+    .settings-mark svg, .nav-icon svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .settings-description { max-width:720px; color:var(--text-muted); font-size:14px; margin-top:4px; }
+    .benefit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:20px; }
+    .benefit-card { padding:20px; border:1px solid var(--border); border-radius:12px; background:var(--surface2); }
+    .benefit-card h3 { font-size:16px; margin-bottom:4px; }
+    .benefit-card p { color:var(--text-muted); font-size:12px; margin-bottom:16px; }
+    .field-label { display:block; margin-bottom:7px; font-size:13px; font-weight:600; color:var(--text); }
+    .percent-wrap { position:relative; max-width:220px; }
+    .percent-wrap .input { width:100%; min-height:46px; padding-right:42px; font-size:16px; }
+    .percent-suffix { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none; }
+    .field-help { color:var(--text-muted); font-size:12px; margin-top:6px; line-height:1.45; }
+    .field-error { min-height:20px; color:var(--danger); font-size:13px; margin-top:6px; }
+    .settings-actions { display:flex; justify-content:flex-end; align-items:center; gap:12px; margin-top:20px; }
+    .settings-notice { flex:1; min-height:22px; font-size:13px; }
+    .settings-notice.success { color:var(--success); }
+    .settings-notice.error { color:var(--danger); }
+    .discount-toolbar { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:18px; }
+    .discount-list { display:grid; gap:12px; }
+    .discount-row { display:grid; grid-template-columns:minmax(160px,1.3fr) .65fr .75fr .85fr auto; gap:16px; align-items:center; padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface2); }
+    .discount-row.inactive { opacity:.7; }
+    .discount-name { font-size:15px; font-weight:700; }
+    .discount-meta { color:var(--text-muted); font-size:12px; margin-top:3px; }
+    .discount-value { font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; }
+    .discount-label { display:block; color:var(--text-muted); font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin-bottom:3px; }
+    .empty-discounts { padding:36px 18px; text-align:center; border:1px dashed var(--border2); border-radius:12px; color:var(--text-muted); }
+    .discount-dialog { width:min(560px,calc(100% - 32px)); border:1px solid var(--border); border-radius:16px; padding:0; color:var(--text); box-shadow:var(--shadow-lg); }
+    .discount-dialog::backdrop { background:rgba(26,26,26,.58); }
+    .dialog-content { padding:26px; }
+    .dialog-content h2 { font-size:20px; margin-bottom:6px; }
+    .dialog-content > p { color:var(--text-muted); font-size:13px; margin-bottom:20px; }
+    .dialog-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .dialog-field.full { grid-column:1/-1; }
+    .dialog-field .input { width:100%; min-height:46px; font-size:16px; }
+    .check-field { display:flex; align-items:flex-start; gap:10px; min-height:44px; cursor:pointer; padding:10px 0; }
+    .check-field input { width:19px; height:19px; margin-top:2px; accent-color:var(--accent2); }
+    .check-field strong { display:block; font-size:13px; }
+    .check-field span { color:var(--text-muted); font-size:12px; }
+    .dialog-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+    .btn:focus-visible, .input:focus-visible { outline:3px solid var(--accent-light); outline-offset:2px; }
+    @media(max-width:900px) {
+      .discount-row { grid-template-columns:1fr 1fr; }
+      .discount-row > :first-child, .discount-row > :last-child { grid-column:1/-1; }
+      .discount-row > :last-child { justify-self:stretch; }
+      .discount-row .btn { width:100%; justify-content:center; }
+    }
+    @media(max-width:700px) {
+      .benefit-grid, .dialog-grid { grid-template-columns:1fr; }
+      .dialog-field.full { grid-column:auto; }
+      .discount-toolbar, .settings-actions { flex-direction:column; align-items:stretch; }
+      .discount-toolbar .btn, .settings-actions .btn { width:100%; min-height:44px; justify-content:center; }
+      .discount-row { grid-template-columns:1fr; }
+      .discount-row > * { grid-column:auto !important; }
+      .dialog-actions { flex-direction:column-reverse; }
+      .dialog-actions .btn { width:100%; min-height:44px; justify-content:center; }
+    }
+    @media(prefers-reduced-motion:reduce) { .fade-up { animation:none; } }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/><div class="sidebar-logo-text"><h2>Kanlungan<br/>Coffee Garage</h2><p>Admin Panel</p></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">◦</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">≡</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">↗</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">☕</span> Menu</a>
+      <a href="promotions.html" class="nav-item"><span class="nav-icon">◇</span> Promotions</a>
+      <a href="discounts.html" class="nav-item active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 5 5 19M7 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg></span> Discount Settings</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">♙</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">□</span> Inventory</a>
+      <a href="devices.html" class="nav-item"><span class="nav-icon">⌁</span> Cloud Devices</a>
+    </nav>
+    <div class="sidebar-footer"><span>Render Cloud</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div><h1>Discount Settings</h1><div class="topbar-sub">Control benefit and custom checkout discounts</div></div>
+      <div class="topbar-right"><span class="topbar-time" id="topbarTime"></span><button class="btn-logout" onclick="logout()">Sign Out</button></div>
+    </div>
+
+    <div class="content fade-up">
+      <section class="card" id="benefitSection" aria-labelledby="benefitTitle" aria-busy="true">
+        <div class="settings-heading">
+          <span class="settings-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M19 5 5 19M7 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg></span>
+          <div><h2 class="card-title" id="benefitTitle">Senior Citizen and PWD</h2><p class="settings-description">These benefits require an ID and apply to one selected item for the customer’s personal consumption.</p></div>
+        </div>
+        <div id="discountLoading" class="loading"><span class="spinner"></span>Loading discount settings…</div>
+        <form id="benefitForm" hidden novalidate>
+          <div class="benefit-grid">
+            <div class="benefit-card">
+              <h3>Senior Citizen</h3><p>Required ID · One selected item</p>
+              <label class="field-label" for="seniorPercent">Discount percentage</label>
+              <div class="percent-wrap"><input class="input" id="seniorPercent" type="number" min="0.01" max="100" step="0.01" inputmode="decimal" required aria-describedby="seniorError"/><span class="percent-suffix">%</span></div>
+              <div class="field-error" id="seniorError" role="alert"></div>
+            </div>
+            <div class="benefit-card">
+              <h3>Persons with Disability (PWD)</h3><p>Required ID · One selected item</p>
+              <label class="field-label" for="pwdPercent">Discount percentage</label>
+              <div class="percent-wrap"><input class="input" id="pwdPercent" type="number" min="0.01" max="100" step="0.01" inputmode="decimal" required aria-describedby="pwdError"/><span class="percent-suffix">%</span></div>
+              <div class="field-error" id="pwdError" role="alert"></div>
+            </div>
+          </div>
+          <p class="field-help">Changes are downloaded by connected POS devices when the POS or Settings screen is opened.</p>
+          <div class="settings-actions"><div class="settings-notice" id="benefitNotice" role="status" aria-live="polite"></div><button class="btn btn-primary" id="saveBenefits" type="submit">Save benefit discounts</button></div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="customTitle">
+        <div class="discount-toolbar">
+          <div><h2 class="card-title" id="customTitle">Custom discounts</h2><p class="card-sub">Reusable discounts shown during POS checkout. Disabled discounts remain in past orders.</p></div>
+          <button class="btn btn-primary" id="addDiscount" type="button">Add discount</button>
+        </div>
+        <div class="discount-list" id="discountList" aria-live="polite"></div>
+        <div class="settings-notice" id="customNotice" role="status" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog class="discount-dialog" id="discountDialog" aria-labelledby="discountDialogTitle">
+  <form class="dialog-content" id="discountForm" method="dialog" novalidate>
+    <h2 id="discountDialogTitle">Add discount</h2>
+    <p>Choose how this discount appears and calculates at checkout.</p>
+    <div class="dialog-grid">
+      <div class="dialog-field full"><label class="field-label" for="discountName">Discount name</label><input class="input" id="discountName" maxlength="60" autocomplete="off" required/><div class="field-error" id="discountNameError"></div></div>
+      <div class="dialog-field"><label class="field-label" for="discountPercent">Percentage</label><input class="input" id="discountPercent" type="number" min="0.01" max="100" step="0.01" inputmode="decimal" required/><div class="field-error" id="discountPercentError"></div></div>
+      <div class="dialog-field"><label class="field-label" for="discountScope">Applies to</label><select class="input" id="discountScope"><option value="item">One selected item</option><option value="order">Whole order</option></select></div>
+      <div class="dialog-field"><label class="field-label" for="discountSortOrder">Display order</label><input class="input" id="discountSortOrder" type="number" min="0" max="10000" step="1" inputmode="numeric" value="0"/></div>
+      <div class="dialog-field">
+        <label class="check-field" for="discountReference"><input id="discountReference" type="checkbox"/><span><strong>Require ID or reference</strong><span>Cashier must enter it before payment.</span></span></label>
+      </div>
+      <div class="dialog-field full">
+        <label class="check-field" for="discountActive"><input id="discountActive" type="checkbox" checked/><span><strong>Active on POS</strong><span>Turn this off to hide it from new transactions.</span></span></label>
+      </div>
+    </div>
+    <div class="field-error" id="dialogError" role="alert"></div>
+    <div class="dialog-actions"><button class="btn btn-outline" id="cancelDiscount" type="button">Cancel</button><button class="btn btn-primary" id="saveDiscount" type="submit">Save discount</button></div>
+  </form>
+</dialog>
+
+<dialog class="discount-dialog" id="disableDialog" aria-labelledby="disableTitle">
+  <div class="dialog-content"><h2 id="disableTitle">Disable this discount?</h2><p id="disableMessage">It will disappear from new POS transactions. Historical orders will not change.</p><div class="dialog-actions"><button class="btn btn-outline" id="cancelDisable" type="button">Cancel</button><button class="btn btn-danger" id="confirmDisable" type="button">Disable discount</button></div></div>
+</dialog>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/discounts.js"></script>
+</body>
+</html>

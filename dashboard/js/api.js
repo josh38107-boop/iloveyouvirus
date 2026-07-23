@@ -88,6 +88,16 @@ const api = {
   }),
   getPromotionClaims: (status = 'all', limit = 20, offset = 0) =>
     apiFetch(`/admin/promotion/claims?status=${encodeURIComponent(status)}&limit=${limit}&offset=${offset}`),
+  getDiscountSettings: () => apiFetch('/admin/discount-settings'),
+  updateDiscountBenefits: (settings) => apiFetch('/admin/discount-settings', {
+    method: 'PUT', body: JSON.stringify(settings)
+  }),
+  createCustomDiscount: (discount) => apiFetch('/admin/discount-settings/custom', {
+    method: 'POST', body: JSON.stringify(discount)
+  }),
+  updateCustomDiscount: (id, discount) => apiFetch(`/admin/discount-settings/custom/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(discount)
+  }),
 
   // Table endpoints
   getMenuCategories: () => apiFetch('/admin/data/menu_category?select=*'),

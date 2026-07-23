@@ -14,11 +14,14 @@ class StoreSettingsSyncTest {
     )
 
     @Test
-    fun managerPendingSettingsWinOverStaleRemoteSettings() {
+    fun websiteDiscountsWinWhileManagerPendingStoreFieldsArePreserved() {
         val local = settings(senior = 15.0, pwd = 10.0)
         val staleRemote = settings(senior = 20.0, pwd = 20.0)
 
-        assertEquals(local, resolveRemoteStoreSettings(local, staleRemote, preserveLocalSettings = true))
+        val resolved = resolveRemoteStoreSettings(local, staleRemote, preserveLocalSettings = true)
+        assertEquals(local.storeName, resolved.storeName)
+        assertEquals(20.0, resolved.seniorDiscountPercent, 0.0)
+        assertEquals(20.0, resolved.pwdDiscountPercent, 0.0)
     }
 
     @Test

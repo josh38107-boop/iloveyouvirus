@@ -8,6 +8,7 @@ const { createCloud } = require('./cloud');
 const { createInventoryService } = require('./inventory');
 const { createMenuService } = require('./menu');
 const { createEmployeeService } = require('./employees');
+const { createDiscountService } = require('./discounts');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -19,6 +20,7 @@ const cloud = createCloud(db);
 const inventory = createInventoryService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const menu = createMenuService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const employees = createEmployeeService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
+const discounts = createDiscountService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const promotion = rpc.createPromotionService(db);
 
 // ─── Allowed tables (whitelist for security) ─────────────────────────────────
@@ -26,7 +28,7 @@ const ALLOWED_TABLES = new Set([
   'sync_device_authority', 'sync_tombstone',
   'menu_category', 'menu_item', 'modifier_group', 'modifier_option',
   'menu_item_modifier_group', 'ingredient', 'recipe_ingredient',
-  'modifier_recipe_ingredient', 'payment_method', 'employee',
+  'modifier_recipe_ingredient', 'payment_method', 'discount_rule', 'employee',
   'store_settings', 'shift', 'pos_order', 'order_line', 'payment',
   'receipt', 'stock_snapshot', 'inventory_balance', 'order_inventory_add_on'
 ]);
@@ -201,7 +203,7 @@ app.all('/rest/v1/:table', authenticate, async (req, res) => {
   }
   const managerTables = new Set(['sync_device_authority', 'sync_tombstone', 'menu_category', 'menu_item', 'modifier_group',
     'modifier_option', 'menu_item_modifier_group', 'ingredient', 'recipe_ingredient', 'modifier_recipe_ingredient',
-    'payment_method', 'employee', 'store_settings']);
+    'payment_method', 'discount_rule', 'employee', 'store_settings']);
   if (req.syncDevice && req.method !== 'GET' && managerTables.has(table) && req.syncDevice.role !== 'manager') {
     return res.status(403).json({ error: 'Manager device role required' });
   }
@@ -217,6 +219,7 @@ app.all('/rest/v1/:table', authenticate, async (req, res) => {
 app.all('/admin/data/:table', adminAuthenticate, async (req, res) => {
   const { table } = req.params;
   if (table === 'employee') return res.status(404).json({ error: 'Use the dedicated employee management API.' });
+  if (table === 'discount_rule') return res.status(404).json({ error: 'Use the dedicated discount settings API.' });
   if (!ALLOWED_TABLES.has(table)) return res.status(404).json({ error: `Table '${table}' not found` });
   switch (req.method) {
     case 'GET': return handleGet(req, res, table);
@@ -287,7 +290,7 @@ function paymentCategory(row) {
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
     const { days, fromMs } = reportRange(req.query.days);
-    const [summaryRes, topItemsRes, paymentRes, shiftsRes] = await Promise.all([
+    const [summaryRes, topItemsRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
@@ -325,6 +328,16 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         GROUP BY s.id, s.starting_cash_cents, s.ending_cash_cents,
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
         ORDER BY s.opened_at
+      `, [fromMs]),
+      db.query(`
+        SELECT COALESCE(discount_category, 'Discount') AS name,
+               COALESCE(discount_scope, 'item') AS scope,
+               COUNT(*) AS order_count,
+               COALESCE(SUM(discount_cents), 0) AS amount_cents
+        FROM pos_order
+        WHERE created_at >= $1 AND status != 'void' AND discount_cents > 0
+        GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
+        ORDER BY amount_cents DESC
       `, [fromMs])
     ]);
 
@@ -364,6 +377,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       grossSales: parseInt(summaryRes.rows[0].gross),
       netSales: parseInt(summaryRes.rows[0].net),
       topItems: topItemsRes.rows,
+      discountBreakdown: discountRes.rows,
       paymentBreakdown: payments,
       cashDrawer
     });
@@ -501,6 +515,26 @@ app.delete('/admin/menu/modifier-options/:id', adminAuthenticate, async (req, re
 app.get('/admin/promotion', adminAuthenticate, async (req, res) => {
   try { res.json(await promotion.getConfig()); }
   catch (err) { console.error('GET /admin/promotion:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.get('/admin/discount-settings', adminAuthenticate, async (req, res) => {
+  try { res.json(await discounts.getSettings()); }
+  catch (err) { console.error('GET /admin/discount-settings:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/discount-settings', adminAuthenticate, async (req, res) => {
+  try { res.json(await discounts.updateBenefits(req.body || {})); }
+  catch (err) { console.error('PUT /admin/discount-settings:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/discount-settings/custom', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await discounts.createRule(req.body || {})); }
+  catch (err) { console.error('POST /admin/discount-settings/custom:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/discount-settings/custom/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await discounts.updateRule(req.params.id, req.body || {})); }
+  catch (err) { console.error('PUT /admin/discount-settings/custom/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
 });
 
 app.put('/admin/promotion', adminAuthenticate, async (req, res) => {
