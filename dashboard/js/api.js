@@ -82,6 +82,12 @@ const api = {
   deactivateEmployee: (id) => apiFetch(`/admin/employees/${encodeURIComponent(id)}`, {
     method: 'DELETE'
   }),
+  getPromotion: () => apiFetch('/admin/promotion'),
+  updatePromotion: (promotion) => apiFetch('/admin/promotion', {
+    method: 'PUT', body: JSON.stringify(promotion)
+  }),
+  getPromotionClaims: (status = 'all', limit = 20, offset = 0) =>
+    apiFetch(`/admin/promotion/claims?status=${encodeURIComponent(status)}&limit=${limit}&offset=${offset}`),
 
   // Table endpoints
   getMenuCategories: () => apiFetch('/admin/data/menu_category?select=*'),

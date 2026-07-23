@@ -19,6 +19,7 @@ const cloud = createCloud(db);
 const inventory = createInventoryService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const menu = createMenuService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const employees = createEmployeeService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
+const promotion = rpc.createPromotionService(db);
 
 // ─── Allowed tables (whitelist for security) ─────────────────────────────────
 const ALLOWED_TABLES = new Set([
@@ -247,10 +248,17 @@ async function handleRpc(req, res) {
   }
 }
 
-app.post('/rest/v1/rpc/:fn', authenticate, handleRpc);
+function rejectDevicePromotionUpdate(req, res, next) {
+  if (req.params.fn === 'update_promotion_config') {
+    return res.status(403).json({ error: 'Manage Free Drink Promotion settings in the admin website.' });
+  }
+  return next();
+}
+
+app.post('/rest/v1/rpc/:fn', authenticate, rejectDevicePromotionUpdate, handleRpc);
 app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, (req, res, next) => {
-  if (req.params.fn === 'update_promotion_config' && req.syncDevice.role !== 'manager') {
-    return res.status(403).json({ error: 'Manager device role required' });
+  if (req.params.fn === 'update_promotion_config') {
+    return res.status(403).json({ error: 'Manage Free Drink Promotion settings in the admin website.' });
   }
   return handleRpc(req, res, next);
 });
@@ -488,6 +496,29 @@ app.put('/admin/menu/modifier-options/:id', adminAuthenticate, async (req, res) 
 app.delete('/admin/menu/modifier-options/:id', adminAuthenticate, async (req, res) => {
   try { res.json(await menu.deleteModifierOption(req.params.id)); }
   catch (err) { console.error('DELETE /admin/menu/modifier-options/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.get('/admin/promotion', adminAuthenticate, async (req, res) => {
+  try { res.json(await promotion.getConfig()); }
+  catch (err) { console.error('GET /admin/promotion:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/promotion', adminAuthenticate, async (req, res) => {
+  try { res.json(await promotion.updateConfig(req.body || {})); }
+  catch (err) { console.error('PUT /admin/promotion:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.get('/admin/promotion/claims', adminAuthenticate, async (req, res) => {
+  try {
+    res.json(await promotion.listClaims({
+      status: req.query.status,
+      limit: req.query.limit == null ? undefined : Number(req.query.limit),
+      offset: req.query.offset == null ? undefined : Number(req.query.offset)
+    }));
+  } catch (err) {
+    console.error('GET /admin/promotion/claims:', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
+  }
 });
 
 app.get('/admin/employees', adminAuthenticate, async (req, res) => {

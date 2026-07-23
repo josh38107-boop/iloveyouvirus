@@ -267,8 +267,6 @@ data class PosUiState(
     val voidPinError: String? = null,
     val settingsFormVoidPin: String = "1234",
     val promotionConfig: PromotionConfig = PromotionConfig(available = false),
-    val promotionIntervalInput: String = "300",
-    val promotionFormUrlInput: String = "",
     val promotionBusy: Boolean = false,
     val promotionError: String? = null,
     val showPromotionClaimDialog: Boolean = false,
@@ -3866,8 +3864,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     _uiState.update {
                         it.copy(
                             promotionConfig = config,
-                            promotionIntervalInput = config.ordersPerReward.toString(),
-                            promotionFormUrlInput = config.googleFormUrlTemplate,
                             promotionBusy = false,
                             promotionError = config.message
                         )
@@ -3882,61 +3878,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                         )
                     }
                 }
-        }
-    }
-
-    fun updatePromotionInterval(value: String) {
-        _uiState.update { it.copy(promotionIntervalInput = value.filter(Char::isDigit).take(6), promotionError = null) }
-    }
-
-    fun updatePromotionFormUrl(value: String) {
-        _uiState.update { it.copy(promotionFormUrlInput = value.trim(), promotionError = null) }
-    }
-
-    fun togglePromotionEnabled(enabled: Boolean) {
-        _uiState.update { it.copy(promotionConfig = it.promotionConfig.copy(enabled = enabled), promotionError = null) }
-    }
-
-    fun savePromotionConfig() {
-        val state = _uiState.value
-        val employee = state.employee
-        if (employee?.role != "manager") {
-            _uiState.update { it.copy(promotionError = "Manager access is required.") }
-            return
-        }
-        if (!requireConfigurationAuthority("promotion settings")) return
-        val interval = state.promotionIntervalInput.toIntOrNull()
-        val error = when {
-            interval == null || interval !in 1..100_000 -> "Orders per QR reward must be from 1 to 100,000."
-            state.promotionConfig.enabled && !state.promotionFormUrlInput.contains("{CLAIM_CODE}") ->
-                "The Google Form URL must contain the {CLAIM_CODE} placeholder."
-            else -> null
-        }
-        if (error != null) {
-            _uiState.update { it.copy(promotionError = error) }
-            return
-        }
-        viewModelScope.launch {
-            _uiState.update { it.copy(promotionBusy = true, promotionError = null) }
-            container.supabaseSyncManager.updatePromotionConfig(
-                enabled = state.promotionConfig.enabled,
-                ordersPerReward = interval!!,
-                googleFormUrlTemplate = state.promotionFormUrlInput,
-                employeeId = employee.id
-            ).onSuccess { config ->
-                _uiState.update {
-                    it.copy(
-                        promotionConfig = config,
-                        promotionIntervalInput = config.ordersPerReward.toString(),
-                        promotionBusy = false,
-                        statusMessage = "Promotion settings saved. Current cycle progress was reset if the interval changed."
-                    )
-                }
-            }.onFailure { failure ->
-                _uiState.update {
-                    it.copy(promotionBusy = false, promotionError = failure.localizedMessage ?: "Unable to save promotion settings.")
-                }
-            }
         }
     }
 

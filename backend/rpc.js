@@ -16,8 +16,55 @@ function promotionConfigResponse(row, eligibleItemIds = []) {
     lifetime_order_count: Number(row.lifetime_order_count),
     google_form_url_template: row.google_form_url_template || '',
     eligible_item_ids: eligibleItemIds,
+    claim_validity_days: Number(row.claim_validity_days),
+    updated_at: Number(row.updated_at),
     message: null
   };
+}
+
+function adminPromotionConfigResponse(config) {
+  return {
+    available: config.available,
+    enabled: config.enabled,
+    ordersPerReward: config.orders_per_reward,
+    cycleProgress: config.cycle_progress,
+    lifetimeOrderCount: config.lifetime_order_count,
+    googleFormUrlTemplate: config.google_form_url_template,
+    claimValidityDays: config.claim_validity_days,
+    updatedAt: config.updated_at,
+    rewardPolicy: 'any-drink-base-price'
+  };
+}
+
+function httpError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+function assertExpectedPromotionVersion(currentUpdatedAt, expectedUpdatedAt) {
+  if (expectedUpdatedAt != null &&
+      Number(expectedUpdatedAt) !== Number(currentUpdatedAt)) {
+    throw httpError(409, 'Promotion settings changed in another session. Reload and try again.');
+  }
+}
+
+function validateGoogleFormTemplate(enabled, template) {
+  if (!enabled) return null;
+  let url;
+  try {
+    url = new URL(template);
+  } catch {
+    return 'Enter a valid Google Forms prefilled URL.';
+  }
+  if (url.protocol !== 'https:' || url.hostname !== 'docs.google.com' || !url.pathname.includes('/forms/')) {
+    return 'Use an HTTPS prefilled URL from Google Forms.';
+  }
+  const claimEntries = [...new Set(
+    [...url.searchParams.keys()].filter(key => /^entry\.\d+$/.test(key))
+  )];
+  if (claimEntries.length !== 1) {
+    return 'Prefill only the Claim Code question, then paste the generated Google Forms link here.';
+  }
+  return null;
 }
 
 function promotionResultResponse(entry, award, config) {
@@ -56,7 +103,19 @@ function promotionClaimResponse(row, valid, message = null) {
 }
 
 function buildPromotionQrUrl(template, claimCode) {
-  return String(template || '').replaceAll('{CLAIM_CODE}', encodeURIComponent(claimCode));
+  const source = String(template || '');
+  if (source.includes('{CLAIM_CODE}')) {
+    return source.replaceAll('{CLAIM_CODE}', encodeURIComponent(claimCode));
+  }
+  try {
+    const url = new URL(source);
+    const claimEntry = [...url.searchParams.keys()].find(key => /^entry\.\d+$/.test(key));
+    if (!claimEntry) return source;
+    url.searchParams.set(claimEntry, claimCode);
+    return url.toString();
+  } catch {
+    return source;
+  }
 }
 
 async function promotionTransaction(db, work) {
@@ -150,6 +209,8 @@ async function get_promotion_config(params, db) {
       lifetime_order_count: 0,
       google_form_url_template: '',
       eligible_item_ids: [],
+      claim_validity_days: 30,
+      updated_at: 0,
       message: 'Promotion database migration is not installed on Render.'
     };
   }
@@ -164,14 +225,15 @@ async function update_promotion_config(params, db) {
     ? [...new Set(params.eligible_item_ids.map(String).filter(Boolean))]
     : [];
   if (!Number.isInteger(ordersPerReward) || ordersPerReward < 1 || ordersPerReward > 100_000) {
-    throw new Error('Orders per QR reward must be from 1 to 100,000.');
+    throw httpError(400, 'Orders per QR reward must be from 1 to 100,000.');
   }
-  if (enabled && !formUrl.includes('{CLAIM_CODE}')) {
-    throw new Error('The Google Form URL must contain the {CLAIM_CODE} placeholder.');
-  }
+  const templateError = validateGoogleFormTemplate(enabled, formUrl);
+  if (templateError) throw httpError(400, templateError);
   return promotionTransaction(db, async client => {
     const existing = await ensurePromotionCampaign(client);
+    assertExpectedPromotionVersion(existing.updated_at, params.expected_updated_at);
     const intervalChanged = Number(existing.orders_per_reward) !== ordersPerReward;
+    const nextUpdatedAt = Math.max(Date.now(), Number(existing.updated_at) + 1);
     const result = await client.query(`UPDATE promotion_campaign SET
         enabled=$2,
         orders_per_reward=$3,
@@ -179,7 +241,7 @@ async function update_promotion_config(params, db) {
         google_form_url_template=$5,
         updated_at=$6
       WHERE id=$1 RETURNING *`,
-      ['default', enabled, ordersPerReward, intervalChanged, formUrl, Date.now()]);
+      ['default', enabled, ordersPerReward, intervalChanged, formUrl, nextUpdatedAt]);
     await client.query("DELETE FROM promotion_eligible_item WHERE campaign_id='default'");
     for (const itemId of eligibleItemIds) {
       await client.query(`INSERT INTO promotion_eligible_item(campaign_id,item_id)
@@ -187,6 +249,118 @@ async function update_promotion_config(params, db) {
     }
     return promotionConfigResponse(result.rows[0], eligibleItemIds);
   });
+}
+
+async function list_promotion_claims(params, db) {
+  const { status, limit, offset } = validatePromotionClaimListInput(params);
+  const currentTime = Date.now();
+  const effectiveStatus = `CASE
+    WHEN award.status IN ('issued','reserved') AND award.expires_at < $1 THEN 'expired'
+    ELSE award.status END`;
+  const filter = status === 'all' ? '' : `WHERE effective_status=$2`;
+  const baseValues = status === 'all' ? [currentTime] : [currentTime, status];
+  const listValues = [...baseValues, limit, offset];
+  const limitIndex = baseValues.length + 1;
+  const offsetIndex = baseValues.length + 2;
+  const [itemsResult, totalResult, countsResult] = await Promise.all([
+    db.query(`WITH claims AS (
+        SELECT award.*, entry.cycle_position,
+          ${effectiveStatus} AS effective_status,
+          EXISTS (
+            SELECT 1 FROM promotion_form_submission submission
+            WHERE submission.claim_code=award.claim_code
+          ) AS form_submitted
+        FROM promotion_award award
+        JOIN promotion_entry entry ON entry.order_id=award.order_id
+      )
+      SELECT * FROM claims ${filter}
+      ORDER BY issued_at DESC, sequence_number DESC
+      LIMIT $${limitIndex} OFFSET $${offsetIndex}`, listValues),
+    db.query(`WITH claims AS (
+        SELECT ${effectiveStatus} AS effective_status
+        FROM promotion_award award
+      )
+      SELECT COUNT(*)::INTEGER AS total FROM claims ${filter}`, baseValues),
+    db.query(`WITH claims AS (
+        SELECT ${effectiveStatus} AS effective_status
+        FROM promotion_award award
+      )
+      SELECT effective_status, COUNT(*)::INTEGER AS count
+      FROM claims GROUP BY effective_status`, [currentTime])
+  ]);
+  const statusCounts = Object.fromEntries(
+    ['issued', 'reserved', 'claimed', 'expired', 'cancelled'].map(key => [key, 0])
+  );
+  for (const row of countsResult.rows) statusCounts[row.effective_status] = Number(row.count);
+  return {
+    items: itemsResult.rows.map(row => ({
+      awardId: String(row.id),
+      claimCode: row.claim_code,
+      status: row.effective_status,
+      sequenceNumber: Number(row.sequence_number),
+      cyclePosition: Number(row.cycle_position),
+      sourceOrderId: row.order_id,
+      issuedAt: Number(row.issued_at),
+      expiresAt: Number(row.expires_at),
+      printedAt: row.printed_at == null ? null : Number(row.printed_at),
+      printCount: Number(row.print_count),
+      formSubmitted: Boolean(row.form_submitted),
+      reservedAt: row.reserved_at == null ? null : Number(row.reserved_at),
+      redemptionOrderId: row.redemption_order_id,
+      claimedAt: row.claimed_at == null ? null : Number(row.claimed_at)
+    })),
+    total: Number(totalResult.rows[0].total),
+    statusCounts,
+    limit,
+    offset
+  };
+}
+
+function validatePromotionClaimListInput(params = {}) {
+  const allowedStatuses = new Set(['all', 'issued', 'reserved', 'claimed', 'expired', 'cancelled']);
+  const status = String(params.status || 'all').toLowerCase();
+  if (!allowedStatuses.has(status)) throw httpError(400, 'Invalid promotion claim status.');
+  const limit = Number(params.limit ?? 50);
+  const offset = Number(params.offset ?? 0);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw httpError(400, 'Claim page size must be from 1 to 100.');
+  }
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw httpError(400, 'Claim offset must be a nonnegative integer.');
+  }
+  return { status, limit, offset };
+}
+
+function createPromotionService(db) {
+  return {
+    async getConfig() {
+      return adminPromotionConfigResponse(await get_promotion_config({}, db));
+    },
+    async updateConfig(input) {
+      if (typeof input.enabled !== 'boolean') {
+        throw httpError(400, 'Promotion enabled state must be true or false.');
+      }
+      if (typeof input.googleFormUrlTemplate !== 'string') {
+        throw httpError(400, 'Google Form URL template is required.');
+      }
+      if (input.expectedUpdatedAt == null ||
+          !Number.isSafeInteger(Number(input.expectedUpdatedAt)) ||
+          Number(input.expectedUpdatedAt) < 0) {
+        throw httpError(400, 'Reload promotion settings before saving.');
+      }
+      const config = await update_promotion_config({
+        enabled: input.enabled,
+        orders_per_reward: input.ordersPerReward,
+        google_form_url_template: input.googleFormUrlTemplate,
+        eligible_item_ids: [],
+        expected_updated_at: input.expectedUpdatedAt
+      }, db);
+      return adminPromotionConfigResponse(config);
+    },
+    listClaims(input) {
+      return list_promotion_claims(input, db);
+    }
+  };
 }
 
 // ─── get_promotion_result ─────────────────────────────────────────────────────
@@ -381,10 +555,16 @@ module.exports = {
   release_promotion_claim,
   finalize_promotion_claim,
   mark_promotion_printed,
+  list_promotion_claims,
+  createPromotionService,
   _test: {
     buildPromotionQrUrl,
     promotionConfigResponse,
     promotionResultResponse,
-    promotionClaimResponse
+    promotionClaimResponse,
+    adminPromotionConfigResponse,
+    validateGoogleFormTemplate,
+    assertExpectedPromotionVersion,
+    validatePromotionClaimListInput
   }
 };

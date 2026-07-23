@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Promotions — Kanlungan Coffee Garage</title>
+  <meta name="description" content="Manage the shared Free Drink QR Promotion campaign and review claims"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    .promotion-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
+    .promotion-heading { display:flex; align-items:flex-start; gap:14px; }
+    .promotion-mark { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; color:var(--accent2); background:var(--accent-light); flex:none; }
+    .promotion-mark svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .promotion-description { max-width:680px; color:var(--text-muted); font-size:14px; margin-top:4px; }
+    .promotion-switch { display:inline-flex; align-items:center; gap:10px; min-height:44px; cursor:pointer; font-weight:600; white-space:nowrap; }
+    .promotion-switch input { position:absolute; opacity:0; pointer-events:none; }
+    .switch-track { width:48px; height:28px; border-radius:99px; background:var(--border2); padding:3px; transition:background .2s; }
+    .switch-thumb { display:block; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 2px 5px rgba(0,0,0,.2); transition:transform .2s; }
+    .promotion-switch input:checked + .switch-track { background:var(--success); }
+    .promotion-switch input:checked + .switch-track .switch-thumb { transform:translateX(20px); }
+    .promotion-switch input:focus-visible + .switch-track { outline:3px solid var(--accent-light); outline-offset:3px; }
+    .promotion-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:20px 0; }
+    .promotion-metric { padding:18px; border:1px solid var(--border); border-radius:12px; background:var(--surface2); }
+    .promotion-metric strong { display:block; margin-top:4px; font-size:24px; font-variant-numeric:tabular-nums; }
+    .promotion-progress { margin-top:12px; height:8px; width:100%; border:0; border-radius:99px; overflow:hidden; background:var(--bg2); }
+    .promotion-progress::-webkit-progress-bar { background:var(--bg2); }
+    .promotion-progress::-webkit-progress-value { background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+    .promotion-progress::-moz-progress-bar { background:linear-gradient(90deg,var(--accent),var(--accent2)); }
+    .promotion-form-grid { display:grid; grid-template-columns:minmax(220px,.65fr) minmax(0,1.35fr); gap:20px; }
+    .promotion-field label { display:block; margin-bottom:7px; font-size:13px; font-weight:600; }
+    .promotion-field .input { width:100%; min-height:46px; font-size:16px; }
+    .promotion-field textarea.input { min-height:94px; resize:vertical; line-height:1.45; }
+    .field-help { color:var(--text-muted); font-size:12px; margin-top:6px; }
+    .field-error { color:var(--danger); font-size:13px; margin-top:8px; min-height:20px; }
+    .policy-note { display:flex; align-items:flex-start; gap:10px; margin-top:18px; padding:14px 16px; border:1px solid rgba(36,113,163,.22); background:rgba(36,113,163,.06); border-radius:10px; color:var(--text-muted); font-size:13px; }
+    .policy-note svg { width:20px; height:20px; flex:none; color:var(--info); fill:none; stroke:currentColor; stroke-width:2; }
+    .promotion-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:20px; }
+    .promotion-notice { min-height:22px; margin-top:12px; font-size:13px; text-align:right; }
+    .promotion-notice.success { color:var(--success); }
+    .promotion-notice.error { color:var(--danger); }
+    .claims-toolbar { display:flex; align-items:end; justify-content:space-between; gap:16px; margin-bottom:16px; }
+    .claims-toolbar-group { display:flex; align-items:end; gap:10px; flex-wrap:wrap; }
+    .claims-filter label { display:block; margin-bottom:5px; color:var(--text-muted); font-size:12px; font-weight:600; }
+    .claims-table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:10px; }
+    .claims-table { min-width:1050px; }
+    .claim-code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; font-weight:700; }
+    .claim-order { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; }
+    .claim-detail { color:var(--text-muted); font-size:11px; margin-top:2px; }
+    .claims-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:16px; color:var(--text-muted); font-size:13px; }
+    .claims-footer-actions { display:flex; gap:8px; }
+    .promotion-dialog { width:min(480px,calc(100% - 32px)); border:1px solid var(--border); border-radius:16px; padding:0; color:var(--text); box-shadow:var(--shadow-lg); }
+    .promotion-dialog::backdrop { background:rgba(26,26,26,.55); }
+    .promotion-dialog-content { padding:26px; }
+    .promotion-dialog h2 { font-size:20px; margin-bottom:10px; }
+    .promotion-dialog p { color:var(--text-muted); line-height:1.6; }
+    .promotion-dialog-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:24px; }
+    .btn:focus-visible, .input:focus-visible { outline:3px solid var(--accent-light); outline-offset:2px; }
+    [hidden] { display:none !important; }
+    @media (max-width:900px) {
+      .promotion-form-grid { grid-template-columns:1fr; }
+      .promotion-metrics { grid-template-columns:1fr; }
+    }
+    @media (max-width:640px) {
+      .promotion-hero, .claims-toolbar, .claims-footer { align-items:stretch; flex-direction:column; }
+      .promotion-switch { align-self:flex-start; }
+      .promotion-actions .btn, .claims-toolbar .btn { width:100%; justify-content:center; min-height:44px; }
+      .claims-toolbar-group { align-items:stretch; flex-direction:column; }
+      .claims-filter, .claims-filter .input { width:100%; }
+      .promotion-dialog-actions { flex-direction:column-reverse; }
+      .promotion-dialog-actions .btn { width:100%; justify-content:center; min-height:44px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      .switch-track, .switch-thumb, .progress-bar { transition:none; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text"><h2>Kanlungan<br/>Coffee Garage</h2><p>Admin Panel</p></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">▦</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">≡</span> Orders</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">↗</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">☕</span> Menu</a>
+      <a href="promotions.html" class="nav-item active"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 7v14M12 7H7.5a2.5 2.5 0 1 1 2.45-3c.5 1.5 2.05 3 2.05 3Zm0 0h4.5a2.5 2.5 0 1 0-2.45-3C13.55 5.5 12 7 12 7Z"/></svg></span> Promotions</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">♙</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">□</span> Inventory</a>
+      <a href="devices.html" class="nav-item"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 8.5 4.75 4.75 0 0 0 7 18Z"/></svg></span> Cloud Devices</a>
+    </nav>
+    <div class="sidebar-footer"><span>Render Cloud</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div><h1>Promotions</h1><div class="topbar-sub">Manage the cloud-controlled Free Drink QR campaign</div></div>
+      <div class="topbar-right"><span class="topbar-time" id="topbarTime"></span><button class="btn-logout" onclick="logout()">Sign Out</button></div>
+    </div>
+
+    <div class="content fade-up">
+      <section class="card" id="promotionCard" aria-labelledby="promotionTitle" aria-busy="true">
+        <div class="promotion-hero">
+          <div class="promotion-heading">
+            <span class="promotion-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 7v14M12 7H7.5a2.5 2.5 0 1 1 2.45-3c.5 1.5 2.05 3 2.05 3Zm0 0h4.5a2.5 2.5 0 1 0-2.45-3C13.55 5.5 12 7 12 7Z"/></svg>
+            </span>
+            <div>
+              <h2 class="card-title" id="promotionTitle">Free Drink QR Promotion</h2>
+              <p class="promotion-description">One shared campaign controls reward counting, winning receipt QR codes, and claim redemption across every connected POS.</p>
+            </div>
+          </div>
+          <label class="promotion-switch" for="promotionEnabled">
+            <span id="promotionEnabledLabel">Disabled</span>
+            <input type="checkbox" id="promotionEnabled"/>
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+
+        <div id="promotionLoading" class="loading"><span class="spinner"></span>Loading campaign…</div>
+        <form id="promotionForm" hidden novalidate>
+          <div class="promotion-metrics" aria-label="Campaign progress">
+            <div class="promotion-metric"><span class="stat-label">Cycle progress</span><strong id="cycleProgress">—</strong><progress class="promotion-progress" id="cycleProgressBar" value="0" max="1"></progress></div>
+            <div class="promotion-metric"><span class="stat-label">Reward interval</span><strong id="rewardInterval">—</strong><span class="stat-sub">Paid orders per winner</span></div>
+            <div class="promotion-metric"><span class="stat-label">Lifetime orders</span><strong id="lifetimeOrders">—</strong><span class="stat-sub">Counted once by Render Cloud</span></div>
+          </div>
+
+          <div class="promotion-form-grid">
+            <div class="promotion-field">
+              <label for="ordersPerReward">Orders per QR reward</label>
+              <input class="input" id="ordersPerReward" type="number" min="1" max="100000" step="1" inputmode="numeric" required aria-describedby="ordersHelp"/>
+              <p class="field-help" id="ordersHelp">From 1 to 100,000. Changing this number starts a fresh cycle at zero; existing claims remain valid.</p>
+            </div>
+            <div class="promotion-field">
+              <label for="googleFormUrl">Google Forms prefilled URL</label>
+              <textarea class="input" id="googleFormUrl" spellcheck="false" aria-describedby="urlHelp urlError"></textarea>
+              <p class="field-help" id="urlHelp">In Google Forms, prefill only the Claim Code question with any sample text, select “Get link,” then paste that link here. The real code is inserted automatically.</p>
+              <p class="field-error" id="urlError" role="alert"></p>
+            </div>
+          </div>
+
+          <div class="policy-note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+            <span>Customers may choose any drink. One base price is free; paid modifiers remain chargeable. Disabling the campaign stops new winners but does not invalidate issued claims.</span>
+          </div>
+
+          <div class="promotion-actions">
+            <button type="button" class="btn btn-outline" id="testPromotionUrl">Test QR link</button>
+            <button type="button" class="btn btn-outline" id="reloadPromotion">Discard changes</button>
+            <button type="submit" class="btn btn-primary" id="savePromotion">Save promotion</button>
+          </div>
+          <div class="promotion-notice" id="promotionNotice" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="claimsTitle">
+        <div class="claims-toolbar">
+          <div>
+            <h2 class="card-title" id="claimsTitle">Reward claims</h2>
+            <p class="card-sub">Read-only history of issued and redeemed free-drink rewards.</p>
+          </div>
+          <div class="claims-toolbar-group">
+            <div class="claims-filter">
+              <label for="claimStatus">Status</label>
+              <select class="input" id="claimStatus">
+                <option value="all">All</option>
+                <option value="issued">Issued</option>
+                <option value="reserved">Reserved</option>
+                <option value="claimed">Claimed</option>
+                <option value="expired">Expired</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-outline" id="refreshClaims">Refresh claims</button>
+          </div>
+        </div>
+        <div class="claims-table-wrap">
+          <table class="data-table claims-table">
+            <thead><tr><th>Claim</th><th>Status</th><th>Winning order</th><th>Issued / expires</th><th>Printed</th><th>Form</th><th>Redemption</th></tr></thead>
+            <tbody id="claimRows"><tr><td colspan="7"><div class="loading"><span class="spinner"></span>Loading claims…</div></td></tr></tbody>
+          </table>
+        </div>
+        <div class="claims-footer">
+          <span id="claimsSummary">—</span>
+          <div class="claims-footer-actions">
+            <button type="button" class="btn btn-outline" id="previousClaims">Previous</button>
+            <button type="button" class="btn btn-outline" id="nextClaims">Next</button>
+          </div>
+        </div>
+        <div class="promotion-notice" id="claimsNotice" role="status" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<dialog class="promotion-dialog" id="promotionConfirm" aria-labelledby="confirmTitle">
+  <div class="promotion-dialog-content">
+    <h2 id="confirmTitle">Confirm promotion change</h2>
+    <p id="confirmMessage"></p>
+    <div class="promotion-dialog-actions">
+      <button type="button" class="btn btn-outline" id="cancelPromotionChange">Cancel</button>
+      <button type="button" class="btn btn-primary" id="confirmPromotionChange">Confirm and save</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/promotions.js"></script>
+</body>
+</html>

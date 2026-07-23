@@ -640,30 +640,6 @@ class SupabaseSyncManager(
         }
     }
 
-    suspend fun updatePromotionConfig(
-        enabled: Boolean,
-        ordersPerReward: Int,
-        googleFormUrlTemplate: String,
-        employeeId: String
-    ): Result<PromotionConfig> = withContext(Dispatchers.IO) {
-        runCatching {
-            val response = rpcRequest(
-                "update_promotion_config",
-                mapOf(
-                    "p_enabled" to enabled,
-                    "p_orders_per_reward" to ordersPerReward,
-                    "p_google_form_url_template" to googleFormUrlTemplate,
-                    // Retained in the RPC payload for backward-compatible database upgrades.
-                    // An empty list now means the customer may choose any drink.
-                    "p_eligible_item_ids" to emptyList<String>(),
-                    "p_employee_id" to employeeId,
-                    "p_device_id" to deviceId
-                )
-            )
-            gson.fromJson(response, PromotionConfig::class.java)
-        }
-    }
-
     suspend fun getPromotionResult(orderId: String): Result<PromotionResult> = withContext(Dispatchers.IO) {
         runCatching {
             val response = rpcRequest(
