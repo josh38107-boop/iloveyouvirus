@@ -54,6 +54,24 @@ const api = {
   deleteMenuItem: (id) => apiFetch(`/admin/menu/items/${encodeURIComponent(id)}`, {
     method: 'DELETE'
   }),
+  createModifierGroup: (group) => apiFetch('/admin/menu/modifier-groups', {
+    method: 'POST', body: JSON.stringify(group)
+  }),
+  updateModifierGroup: (id, group) => apiFetch(`/admin/menu/modifier-groups/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(group)
+  }),
+  deleteModifierGroup: (id) => apiFetch(`/admin/menu/modifier-groups/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
+  createModifierOption: (groupId, option) => apiFetch(`/admin/menu/modifier-groups/${encodeURIComponent(groupId)}/options`, {
+    method: 'POST', body: JSON.stringify(option)
+  }),
+  updateModifierOption: (id, option) => apiFetch(`/admin/menu/modifier-options/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(option)
+  }),
+  deleteModifierOption: (id) => apiFetch(`/admin/menu/modifier-options/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
   getEmployees: () => apiFetch('/admin/employees'),
   createEmployee: (employee) => apiFetch('/admin/employees', {
     method: 'POST', body: JSON.stringify(employee)

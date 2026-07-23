@@ -10,11 +10,12 @@
   <style>
     .menu-notice{display:none;margin-bottom:16px;padding:12px 14px;border-radius:9px;font-size:14px;font-weight:600}.menu-notice.show{display:block}.menu-notice.success{color:var(--success);background:rgba(45,138,94,.1);border:1px solid rgba(45,138,94,.25)}.menu-notice.error{color:var(--danger);background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.25)}
     .menu-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.menu-toolbar .btn,.category-tabs .btn,.row-actions .btn,.modal-card .btn{min-height:44px}.category-tabs{display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;padding:2px 2px 8px}.category-tabs .btn{flex:0 0 auto}.row-actions{display:flex;gap:8px;flex-wrap:wrap}.btn-delete-outline{background:transparent;color:var(--danger);border:1.5px solid var(--danger)}.btn-delete-outline:hover{background:rgba(192,57,43,.08)}.btn-danger-solid{background:var(--danger);color:#fff}.btn-danger-solid:hover{background:#9f2f24}
-    .menu-modal{max-width:780px;max-height:calc(100dvh - 32px);overflow-y:auto}.category-modal{max-width:560px}.delete-modal{max-width:430px}.modal-close{min-width:44px;min-height:44px;border-radius:8px}.form-grid{display:grid;grid-template-columns:1fr 180px;gap:12px}.menu-modal .input,.category-modal .input{min-height:48px;width:100%;font-size:16px}.field-label,.section-title{display:block;margin-bottom:6px;color:var(--text-muted);font-size:13px;font-weight:700}.section-title{color:var(--black);font-size:14px}.section-help{margin:-2px 0 10px;color:var(--text-muted);font-size:12px;line-height:1.45}.editor-section{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+    .menu-modal{max-width:780px;max-height:calc(100dvh - 32px);overflow-y:auto}.category-modal{max-width:560px}.modifier-modal{max-width:920px;max-height:calc(100dvh - 32px);overflow-y:auto}.delete-modal{max-width:430px}.modal-close{min-width:44px;min-height:44px;border-radius:8px}.form-grid{display:grid;grid-template-columns:1fr 180px;gap:12px}.menu-modal .input,.category-modal .input,.modifier-modal .input{min-height:48px;width:100%;font-size:16px}.field-label,.section-title{display:block;margin-bottom:6px;color:var(--text-muted);font-size:13px;font-weight:700}.section-title{color:var(--black);font-size:14px}.section-help{margin:-2px 0 10px;color:var(--text-muted);font-size:12px;line-height:1.45}.editor-section{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
     .choice-grid{display:flex;gap:8px;flex-wrap:wrap}.choice-chip{min-height:44px;padding:8px 13px;border:1.5px solid var(--border2);border-radius:9px;background:var(--surface);color:var(--text);font:600 13px/1.2 'Outfit',sans-serif;cursor:pointer}.choice-chip.selected{background:var(--accent-light);border-color:var(--accent);color:var(--accent2)}.choice-chip small{display:block;margin-top:3px;color:var(--text-muted);font-weight:500}.recipe-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}.recipe-title-row .section-title{margin-bottom:0}.recipe-toggle{flex:0 0 auto}.recipe-toggle[hidden]{display:none}.recipe-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:280px;overflow-y:auto;padding:2px}.recipe-row{display:grid;grid-template-columns:minmax(0,1fr) 105px;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface2)}.recipe-row label{min-width:0;font-size:13px;font-weight:600}.recipe-row label span{display:block;color:var(--text-muted);font-size:11px;font-weight:500}.recipe-row input{min-height:44px;width:100%;box-sizing:border-box}.recipe-empty{grid-column:1/-1;padding:14px;border:1px dashed var(--border2);border-radius:9px;background:var(--surface2);color:var(--text-muted);font-size:13px;line-height:1.45}.choice-scroll{max-height:190px;overflow-y:auto;padding:2px}
     .switch-row{display:flex;align-items:center;gap:10px;min-height:48px;cursor:pointer;color:var(--text-muted);font-size:14px}.switch-control{position:relative;width:50px;height:30px;flex:0 0 auto}.switch-control input{position:absolute;opacity:0;width:1px;height:1px}.switch-track{position:absolute;inset:0;border-radius:999px;background:var(--border2);transition:background .18s}.switch-track::after{content:'';position:absolute;width:24px;height:24px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .18s}.switch-control input:checked + .switch-track{background:var(--black)}.switch-control input:checked + .switch-track::after{transform:translateX(20px)}
     .form-error{min-height:20px;margin-top:8px;color:var(--danger);font-size:13px;font-weight:600}.choice-chip:focus-visible,.row-actions .btn:focus-visible,.category-tabs .btn:focus-visible,.recipe-toggle:focus-visible,.switch-control:focus-within{outline:3px solid var(--accent-light);outline-offset:2px}.category-manager-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.category-chip{min-height:44px}.category-count{margin-left:5px;opacity:.65}.empty-action{margin-top:14px}
-    @media(max-width:700px){.modal-overlay{align-items:flex-end;padding:0}.menu-modal,.category-modal,.delete-modal{max-width:none;max-height:calc(100dvh - 12px);border-radius:16px 16px 0 0;padding:20px}.form-grid,.recipe-list{grid-template-columns:1fr}.data-table thead{display:none}.data-table,.data-table tbody,.data-table tr,.data-table td{display:block;width:100%;box-sizing:border-box}.data-table tr{padding:12px 0;border-bottom:1px solid var(--border)}.data-table td{display:grid;grid-template-columns:100px minmax(0,1fr);gap:10px;padding:7px 12px;border:0}.data-table td::before{content:attr(data-label);color:var(--text-muted);font-size:12px;font-weight:700;text-transform:uppercase}.row-actions{justify-content:flex-start}.data-table td:last-child{align-items:center}.form-actions{flex-wrap:wrap}.form-actions .btn{flex:1 1 120px;justify-content:center}}
+    .modifier-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px}.modifier-group-list{display:flex;flex-direction:column;gap:8px;max-height:560px;overflow-y:auto;padding:2px}.modifier-group-list .choice-chip{text-align:left;width:100%}.modifier-editor{min-width:0}.modifier-option-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.modifier-option-list .choice-chip{min-width:130px;text-align:left}.modifier-option-list .price{display:block;margin-top:3px;color:var(--accent2);font-size:12px}.modifier-form-grid{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px}.modifier-inventory-grid{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:12px}.modifier-section-disabled{padding:14px;border:1px dashed var(--border2);border-radius:9px;background:var(--surface2);color:var(--text-muted);font-size:13px}.modifier-count{margin-left:5px;opacity:.65}.modifier-selection-status{margin-top:8px;color:var(--text-muted);font-size:12px}
+    @media(max-width:700px){.modal-overlay{align-items:flex-end;padding:0}.menu-modal,.category-modal,.modifier-modal,.delete-modal{max-width:none;max-height:calc(100dvh - 12px);border-radius:16px 16px 0 0;padding:20px}.form-grid,.recipe-list,.modifier-layout,.modifier-form-grid,.modifier-inventory-grid{grid-template-columns:1fr}.modifier-group-list{max-height:180px}.data-table thead{display:none}.data-table,.data-table tbody,.data-table tr,.data-table td{display:block;width:100%;box-sizing:border-box}.data-table tr{padding:12px 0;border-bottom:1px solid var(--border)}.data-table td{display:grid;grid-template-columns:100px minmax(0,1fr);gap:10px;padding:7px 12px;border:0}.data-table td::before{content:attr(data-label);color:var(--text-muted);font-size:12px;font-weight:700;text-transform:uppercase}.row-actions{justify-content:flex-start}.data-table td:last-child{align-items:center}.form-actions{flex-wrap:wrap}.form-actions .btn{flex:1 1 120px;justify-content:center}}
     @media(prefers-reduced-motion:reduce){.modal-overlay,.modal-card,.choice-chip,.switch-track,.switch-track::after{transition:none}}
   </style>
 </head>
@@ -40,7 +41,7 @@
     <main class="content fade-up" id="mainContent">
       <div id="menuNotice" class="menu-notice" role="status" aria-live="polite"></div>
       <div class="card">
-        <div class="card-header"><div class="card-title">Menu Items</div><div class="menu-toolbar"><button type="button" class="btn btn-outline" id="manageCategoriesButton">Manage Categories</button><button type="button" class="btn btn-primary" id="addMenuItemButton">+ Add Menu Item</button><button type="button" class="btn btn-outline" id="refreshMenuButton">Refresh</button></div></div>
+        <div class="card-header"><div class="card-title">Menu Items</div><div class="menu-toolbar"><button type="button" class="btn btn-outline" id="manageCategoriesButton">Manage Categories</button><button type="button" class="btn btn-outline" id="manageModifiersButton">Manage Modifiers</button><button type="button" class="btn btn-primary" id="addMenuItemButton">+ Add Menu Item</button><button type="button" class="btn btn-outline" id="refreshMenuButton">Refresh</button></div></div>
         <div id="categoryTabs" class="category-tabs" aria-label="Filter menu items by category"></div>
         <div id="menuTable"><div class="loading"><div class="spinner"></div> Loading menu...</div></div>
       </div>
@@ -56,7 +57,7 @@
       <div class="form-grid"><div class="form-row"><label class="field-label" for="itemName">Item name</label><input class="input" id="itemName" maxlength="120" required autocomplete="off"/></div><div class="form-row"><label class="field-label" for="itemPrice">Price</label><input class="input" id="itemPrice" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="0.00"/></div></div>
       <div class="form-row"><label class="field-label" for="itemDescription">Description</label><textarea class="input" id="itemDescription" maxlength="500" rows="2" placeholder="Custom menu item"></textarea></div>
       <div class="form-grid"><div class="form-row"><label class="field-label" for="itemCategory">Category</label><select class="input" id="itemCategory" required></select></div><label class="switch-row" for="itemActive"><span class="switch-control"><input type="checkbox" id="itemActive" checked/><span class="switch-track" aria-hidden="true"></span></span><span>Active on POS</span></label></div>
-      <section class="editor-section"><div class="section-title">Modifiers</div><p class="section-help">Choose which existing modifier groups customers can select for this item.</p><div id="modifierChoices" class="choice-grid"></div></section>
+      <section class="editor-section"><div class="section-title">Modifiers</div><p class="section-help">Choose which existing modifier groups customers can select for this item.</p><div id="modifierChoices" class="choice-grid"></div><div id="modifierSelectionStatus" class="modifier-selection-status" role="status" aria-live="polite"></div></section>
       <section class="editor-section"><div class="section-title">Complementary (Do Not Deduct)</div><p class="section-help">Selected ingredients will not be deducted when this item is sold as complimentary.</p><div id="exclusionChoices" class="choice-grid choice-scroll"></div></section>
       <section class="editor-section" aria-labelledby="recipeDeductionTitle"><div class="recipe-title-row"><div class="section-title" id="recipeDeductionTitle">Recipe Deduction</div><button type="button" class="btn btn-outline recipe-toggle" id="recipeVisibilityButton" aria-controls="recipeList" aria-expanded="false" hidden>Show All</button></div><p class="section-help" id="recipeHelp">Enter how much stock this item uses each time it sells. At least one positive quantity is required.</p><div id="recipeList" class="recipe-list"></div></section>
       <div id="itemFormError" class="form-error" role="alert"></div>
@@ -74,6 +75,37 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="modifierModal" aria-hidden="true">
+  <div class="modal-card modifier-modal" role="dialog" aria-modal="true" aria-labelledby="modifierModalTitle">
+    <div class="modal-header"><div class="modal-title" id="modifierModalTitle">Manage Modifiers</div><button type="button" class="modal-close" data-close-modal="modifierModal" aria-label="Close modifier manager">&times;</button></div>
+    <p class="section-help">Create a group, add its customer choices, then attach the group to menu items.</p>
+    <div class="modifier-layout">
+      <aside>
+        <div class="section-title">Modifier groups</div>
+        <div id="modifierGroupList" class="modifier-group-list"></div>
+        <button type="button" class="btn btn-outline" id="newModifierGroupButton" style="margin-top:12px;width:100%">New Group</button>
+      </aside>
+      <div class="modifier-editor">
+        <form id="modifierGroupForm">
+          <input type="hidden" id="modifierGroupId"/>
+          <div class="modifier-form-grid">
+            <div class="form-row"><label class="field-label" for="modifierGroupName">Group name</label><input class="input" id="modifierGroupName" maxlength="80" required autocomplete="off" placeholder="e.g. Add-ons"/></div>
+            <div class="form-row"><label class="field-label" for="modifierMaxSelections">Maximum choices</label><input class="input" id="modifierMaxSelections" type="number" min="1" max="20" step="1" required value="1"/></div>
+          </div>
+          <label class="switch-row" for="modifierRequired"><span class="switch-control"><input type="checkbox" id="modifierRequired"/><span class="switch-track" aria-hidden="true"></span></span><span>Customer must choose an option</span></label>
+          <div id="modifierGroupError" class="form-error" role="alert"></div>
+          <div class="form-actions"><button type="button" class="btn btn-delete-outline" id="deleteModifierGroupButton" disabled>Delete Group</button><button type="submit" class="btn btn-primary" id="saveModifierGroupButton">Save Group</button></div>
+        </form>
+        <section class="editor-section" aria-labelledby="modifierOptionsTitle">
+          <div class="section-title" id="modifierOptionsTitle">Options</div>
+          <p class="section-help">Set the customer-facing option, added price, and optional inventory deduction.</p>
+          <div id="modifierOptionArea" class="modifier-section-disabled">Save or select a modifier group before adding options.</div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="deleteModal" aria-hidden="true">
   <div class="modal-card delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="deleteTitle" aria-describedby="deleteDescription">
     <div class="modal-header"><div class="modal-title" id="deleteTitle">Delete Menu Item</div><button type="button" class="modal-close" data-close-modal="deleteModal" aria-label="Close delete confirmation">&times;</button></div>
@@ -85,13 +117,15 @@
 <script src="js/auth.js"></script><script src="js/api.js"></script><script src="js/recipe-editor.js"></script>
 <script>
   requireAuth(); startClock();
-  let menuData = { categories: [], items: [], modifierGroups: [], itemModifierGroups: [], ingredients: [], recipes: [] };
+  let menuData = { categories: [], items: [], modifierGroups: [], modifierOptions: [], itemModifierGroups: [], ingredients: [], recipes: [], modifierRecipes: [] };
   let activeCategory = 'all';
   let selectedModifierIds = new Set();
   let selectedExclusionIds = new Set();
   let recipeDraft = new Map();
   let recipeEditorIsEditing = false;
   let showAllRecipeIngredients = true;
+  let managedModifierGroupId = null;
+  let managedModifierOptionId = null;
   let deleteTarget = null;
   let activeModal = null;
   let previousFocus = null;
@@ -124,6 +158,7 @@
     table.innerHTML = '<div class="loading"><div class="spinner"></div> Loading menu...</div>';
     try {
       menuData = await api.getMenuManagement();
+      menuData.modifierGroups ||= []; menuData.modifierOptions ||= []; menuData.modifierRecipes ||= [];
       if (activeCategory !== 'all' && !menuData.categories.some(category => category.id === activeCategory)) activeCategory = 'all';
       renderCategoryTabs(); renderMenu();
       document.getElementById('addMenuItemButton').disabled = !menuData.categories.length;
@@ -172,6 +207,7 @@
       const id = button.dataset.exclusionId; selectedExclusionIds.has(id) ? selectedExclusionIds.delete(id) : selectedExclusionIds.add(id);
       button.classList.toggle('selected', selectedExclusionIds.has(id)); button.setAttribute('aria-pressed', String(selectedExclusionIds.has(id)));
     }));
+    renderItemChoicesPreservingRecipe();
   }
 
   function renderRecipeEditor() {
@@ -210,6 +246,8 @@
     modifierContainer.querySelectorAll('[data-modifier-id]').forEach(button => {
       const selected = selectedModifierIds.has(button.dataset.modifierId); button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
     });
+    const count = selectedModifierIds.size;
+    document.getElementById('modifierSelectionStatus').textContent = count ? `${count} modifier group${count === 1 ? '' : 's'} selected.` : 'No modifier groups selected.';
   }
 
   function openItemModal(id = null) {
@@ -288,11 +326,149 @@
     finally { button.disabled = false; delete button.dataset.busy; button.textContent = 'Save'; }
   }
 
+  const optionsForGroup = groupId => menuData.modifierOptions.filter(option => option.group_id === groupId);
+  const inventoryRecipeForOption = optionId => menuData.modifierRecipes.find(recipe => recipe.option_id === optionId) || null;
+
+  function renderModifierManager() {
+    const group = menuData.modifierGroups.find(row => row.id === managedModifierGroupId) || null;
+    const option = menuData.modifierOptions.find(row => row.id === managedModifierOptionId && row.group_id === managedModifierGroupId) || null;
+    document.getElementById('modifierGroupList').innerHTML = menuData.modifierGroups.length
+      ? menuData.modifierGroups.map(row => `<button type="button" class="choice-chip ${row.id === managedModifierGroupId ? 'selected' : ''}" data-manage-modifier-group="${escapeHtml(row.id)}" aria-pressed="${row.id === managedModifierGroupId}">${escapeHtml(row.name)}<small>${row.required ? 'Required' : 'Optional'} · max ${row.max_selections}<span class="modifier-count">· ${optionsForGroup(row.id).length} options</span></small></button>`).join('')
+      : '<div class="modifier-section-disabled">No modifier groups yet. Select New Group to create one.</div>';
+    document.querySelectorAll('[data-manage-modifier-group]').forEach(button => button.addEventListener('click', () => selectModifierGroup(button.dataset.manageModifierGroup)));
+
+    document.getElementById('modifierGroupId').value = group?.id || '';
+    document.getElementById('modifierGroupName').value = group?.name || '';
+    document.getElementById('modifierMaxSelections').value = group?.max_selections || 1;
+    document.getElementById('modifierRequired').checked = Boolean(group?.required);
+    document.getElementById('deleteModifierGroupButton').disabled = !group;
+    document.getElementById('modifierGroupError').textContent = '';
+    renderModifierOptionArea(group, option);
+  }
+
+  function renderModifierOptionArea(group, option) {
+    const area = document.getElementById('modifierOptionArea');
+    if (!group) {
+      area.className = 'modifier-section-disabled';
+      area.textContent = 'Save or select a modifier group before adding options.';
+      return;
+    }
+    const options = optionsForGroup(group.id);
+    const recipe = option ? inventoryRecipeForOption(option.id) : null;
+    area.className = '';
+    area.innerHTML = `
+      <div id="modifierOptionList" class="modifier-option-list">${options.length ? options.map(row => `<button type="button" class="choice-chip ${row.id === option?.id ? 'selected' : ''}" data-manage-modifier-option="${escapeHtml(row.id)}" aria-pressed="${row.id === option?.id}">${escapeHtml(row.name)}<span class="price">${Number(row.price_delta_cents) ? `+${formatPeso(row.price_delta_cents)}` : 'No added price'}</span></button>`).join('') : '<span class="section-help">No options yet.</span>'}</div>
+      <button type="button" class="btn btn-outline" id="newModifierOptionButton">New Option</button>
+      <form id="modifierOptionForm" style="margin-top:14px">
+        <input type="hidden" id="modifierOptionId" value="${escapeHtml(option?.id || '')}"/>
+        <div class="modifier-form-grid">
+          <div class="form-row"><label class="field-label" for="modifierOptionName">Option name</label><input class="input" id="modifierOptionName" maxlength="80" required autocomplete="off" value="${escapeHtml(option?.name || '')}" placeholder="e.g. Extra Shot"/></div>
+          <div class="form-row"><label class="field-label" for="modifierOptionPrice">Price add-on (₱)</label><input class="input" id="modifierOptionPrice" type="number" min="0" step="0.01" required value="${option ? (Number(option.price_delta_cents) / 100).toFixed(2) : '0.00'}"/></div>
+        </div>
+        <div class="editor-section">
+          <div class="section-title">Inventory deduction (optional)</div>
+          <p class="section-help">Choose what this option consumes. Use replacement only when it substitutes a base recipe ingredient.</p>
+          <div class="modifier-inventory-grid">
+            <div class="form-row"><label class="field-label" for="modifierOptionIngredient">Deduct ingredient</label><select class="input" id="modifierOptionIngredient"><option value="">None</option>${menuData.ingredients.map(row => `<option value="${escapeHtml(row.id)}" ${row.id === recipe?.ingredient_id ? 'selected' : ''}>${escapeHtml(row.name)} (${escapeHtml(row.unit)})</option>`).join('')}</select></div>
+            <div class="form-row"><label class="field-label" for="modifierOptionQuantity">Quantity</label><input class="input" id="modifierOptionQuantity" type="number" min="0" step="0.001" value="${escapeHtml(recipe?.quantity_used ?? '')}" inputmode="decimal"/></div>
+          </div>
+          <div class="form-row"><label class="field-label" for="modifierOptionReplacement">Replaces base ingredient</label><select class="input" id="modifierOptionReplacement"><option value="">None — this is an add-on</option>${menuData.ingredients.map(row => `<option value="${escapeHtml(row.id)}" ${row.id === recipe?.replaces_ingredient_id ? 'selected' : ''}>${escapeHtml(row.name)}</option>`).join('')}</select></div>
+        </div>
+        <div id="modifierOptionError" class="form-error" role="alert"></div>
+        <div class="form-actions"><button type="button" class="btn btn-delete-outline" id="deleteModifierOptionButton" ${option ? '' : 'disabled'}>Delete Option</button><button type="submit" class="btn btn-primary" id="saveModifierOptionButton">Save Option</button></div>
+      </form>`;
+    document.querySelectorAll('[data-manage-modifier-option]').forEach(button => button.addEventListener('click', () => selectModifierOption(button.dataset.manageModifierOption)));
+    document.getElementById('newModifierOptionButton').addEventListener('click', newModifierOption);
+    document.getElementById('modifierOptionForm').addEventListener('submit', saveModifierOption);
+    document.getElementById('modifierOptionIngredient').addEventListener('change', updateModifierInventoryFields);
+    document.getElementById('deleteModifierOptionButton').addEventListener('click', () => openDeleteModal('modifier-option', managedModifierOptionId));
+    updateModifierInventoryFields();
+  }
+
+  function updateModifierInventoryFields() {
+    const ingredient = document.getElementById('modifierOptionIngredient');
+    const quantity = document.getElementById('modifierOptionQuantity');
+    const replacement = document.getElementById('modifierOptionReplacement');
+    if (!ingredient || !quantity || !replacement) return;
+    const enabled = Boolean(ingredient.value);
+    quantity.disabled = !enabled; quantity.required = enabled;
+    replacement.disabled = !enabled;
+    if (!enabled) { quantity.value = ''; replacement.value = ''; }
+  }
+
+  function newModifierGroup() {
+    managedModifierGroupId = null; managedModifierOptionId = null; renderModifierManager();
+    document.getElementById('modifierGroupName').focus();
+  }
+
+  function selectModifierGroup(id) {
+    managedModifierGroupId = id; managedModifierOptionId = null; renderModifierManager();
+  }
+
+  function newModifierOption() {
+    managedModifierOptionId = null; renderModifierManager();
+    document.getElementById('modifierOptionName')?.focus();
+  }
+
+  function selectModifierOption(id) {
+    managedModifierOptionId = id; renderModifierManager();
+    document.getElementById('modifierOptionName')?.focus();
+  }
+
+  function openModifierModal(groupId = null) {
+    managedModifierGroupId = groupId && menuData.modifierGroups.some(row => row.id === groupId)
+      ? groupId : (menuData.modifierGroups[0]?.id || null);
+    managedModifierOptionId = null; renderModifierManager();
+    setModalOpen(document.getElementById('modifierModal'), true, document.getElementById('modifierGroupName'));
+  }
+
+  async function saveModifierGroup(event) {
+    event.preventDefault();
+    const id = document.getElementById('modifierGroupId').value;
+    const payload = {
+      name: document.getElementById('modifierGroupName').value.trim(),
+      required: document.getElementById('modifierRequired').checked,
+      max_selections: Number(document.getElementById('modifierMaxSelections').value)
+    };
+    const button = document.getElementById('saveModifierGroupButton'); const error = document.getElementById('modifierGroupError');
+    error.textContent = ''; button.disabled = true; button.dataset.busy = 'true'; button.textContent = 'Saving...';
+    try {
+      const saved = id ? await api.updateModifierGroup(id, payload) : await api.createModifierGroup(payload);
+      await loadMenu(); managedModifierGroupId = saved.id; managedModifierOptionId = null; renderModifierManager();
+      setNotice(`${saved.name} modifier group saved.`);
+    } catch (failure) { error.textContent = failure.message; }
+    finally { button.disabled = false; delete button.dataset.busy; button.textContent = 'Save Group'; }
+  }
+
+  async function saveModifierOption(event) {
+    event.preventDefault();
+    if (!managedModifierGroupId) return;
+    const id = document.getElementById('modifierOptionId').value;
+    const ingredientId = document.getElementById('modifierOptionIngredient').value;
+    const payload = {
+      name: document.getElementById('modifierOptionName').value.trim(),
+      price_delta_cents: Math.round(Number(document.getElementById('modifierOptionPrice').value) * 100),
+      ingredient_id: ingredientId || null,
+      quantity_used: ingredientId ? Number(document.getElementById('modifierOptionQuantity').value) : 0,
+      replaces_ingredient_id: ingredientId ? (document.getElementById('modifierOptionReplacement').value || null) : null
+    };
+    const button = document.getElementById('saveModifierOptionButton'); const error = document.getElementById('modifierOptionError');
+    error.textContent = ''; button.disabled = true; button.dataset.busy = 'true'; button.textContent = 'Saving...';
+    try {
+      const saved = id ? await api.updateModifierOption(id, payload) : await api.createModifierOption(managedModifierGroupId, payload);
+      await loadMenu(); managedModifierOptionId = saved.id; renderModifierManager();
+      setNotice(`${saved.name} modifier option saved.`);
+    } catch (failure) { error.textContent = failure.message; }
+    finally { button.disabled = false; delete button.dataset.busy; button.textContent = 'Save Option'; }
+  }
+
   function openDeleteModal(type, id) {
-    const record = type === 'item' ? menuData.items.find(row => row.id === id) : menuData.categories.find(row => row.id === id);
-    if (!record) return setNotice(`${type === 'item' ? 'Menu item' : 'Category'} not found. Refresh and try again.`, 'error');
-    deleteTarget = { type, id, name: record.name };
-    document.getElementById('deleteTitle').textContent = type === 'item' ? 'Delete Menu Item' : 'Delete Category';
+    const collections = { item: menuData.items, category: menuData.categories, 'modifier-group': menuData.modifierGroups, 'modifier-option': menuData.modifierOptions };
+    const labels = { item: 'Menu item', category: 'Category', 'modifier-group': 'Modifier group', 'modifier-option': 'Modifier option' };
+    const record = collections[type]?.find(row => row.id === id);
+    if (!record) return setNotice(`${labels[type] || 'Record'} not found. Refresh and try again.`, 'error');
+    deleteTarget = { type, id, name: record.name, groupId: record.group_id || null };
+    document.getElementById('deleteTitle').textContent = `Delete ${labels[type]}`;
     document.getElementById('deleteDescription').textContent = `Delete "${record.name}"? This cannot be undone.`;
     document.getElementById('deleteError').textContent = '';
     if (activeModal) setModalOpen(activeModal, false);
@@ -303,9 +479,14 @@
     if (!deleteTarget) return; const target = deleteTarget; const button = document.getElementById('confirmDeleteButton');
     button.disabled = true; button.dataset.busy = 'true'; button.textContent = 'Deleting...'; document.getElementById('deleteError').textContent = '';
     try {
-      if (target.type === 'item') await api.deleteMenuItem(target.id); else await api.deleteMenuCategory(target.id);
+      if (target.type === 'item') await api.deleteMenuItem(target.id);
+      else if (target.type === 'category') await api.deleteMenuCategory(target.id);
+      else if (target.type === 'modifier-group') await api.deleteModifierGroup(target.id);
+      else await api.deleteModifierOption(target.id);
       button.disabled = false; delete button.dataset.busy; deleteTarget = null; closeModal('deleteModal'); await loadMenu();
       setNotice(`${target.name} deleted successfully.`);
+      if (target.type === 'modifier-group') openModifierModal();
+      else if (target.type === 'modifier-option') openModifierModal(target.groupId);
     } catch (failure) { document.getElementById('deleteError').textContent = failure.message; }
     finally { button.disabled = false; delete button.dataset.busy; button.textContent = 'Delete'; }
   }
@@ -313,11 +494,15 @@
   document.getElementById('refreshMenuButton').addEventListener('click', loadMenu);
   document.getElementById('addMenuItemButton').addEventListener('click', () => openItemModal());
   document.getElementById('manageCategoriesButton').addEventListener('click', openCategoryModal);
+  document.getElementById('manageModifiersButton').addEventListener('click', () => openModifierModal());
   document.getElementById('recipeVisibilityButton').addEventListener('click', toggleRecipeVisibility);
   document.getElementById('itemForm').addEventListener('submit', saveItem);
   document.getElementById('categoryForm').addEventListener('submit', saveCategory);
+  document.getElementById('modifierGroupForm').addEventListener('submit', saveModifierGroup);
   document.getElementById('newCategoryButton').addEventListener('click', newCategory);
+  document.getElementById('newModifierGroupButton').addEventListener('click', newModifierGroup);
   document.getElementById('deleteCategoryButton').addEventListener('click', () => openDeleteModal('category', document.getElementById('categoryId').value));
+  document.getElementById('deleteModifierGroupButton').addEventListener('click', () => openDeleteModal('modifier-group', managedModifierGroupId));
   document.getElementById('confirmDeleteButton').addEventListener('click', confirmDelete);
   document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => closeModal(button.dataset.closeModal)));
   document.querySelectorAll('.modal-overlay').forEach(modal => modal.addEventListener('mousedown', event => { if (event.target === modal) closeModal(modal.id); }));

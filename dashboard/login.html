@@ -8,7 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css"/>
   <style>
-    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background: #f5f4f0; }
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; min-height:100dvh; padding:24px; background:#f5f4f0; box-sizing:border-box; }
     .login-card {
       background: #ffffff;
       border: 1px solid #e0ddd5;
@@ -16,8 +16,9 @@
       padding: 48px 40px;
       width: 100%;
       max-width: 420px;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+      box-shadow: 0 24px 64px rgba(52,42,18,0.16);
       animation: fadeUp 0.5s ease;
+      box-sizing:border-box;
     }
     .login-logo { text-align:center; margin-bottom:32px; }
     .login-logo h1 { font-size:22px; font-weight:700; color:var(--text); margin:0; }
@@ -27,10 +28,31 @@
     .form-group input {
       width:100%; padding:14px 16px; background:#f5f4f0;
       border:1.5px solid #e0ddd5; border-radius:10px;
-      color:#1a1a1a; font-size:15px; font-family:inherit;
-      transition:border-color 0.2s; box-sizing:border-box;
+      color:#1a1a1a; font-size:16px; font-family:inherit;
+      transition:border-color 0.2s, box-shadow 0.2s; box-sizing:border-box;
     }
-    .form-group input:focus { outline:none; border-color:var(--accent); }
+    .form-group input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(201,162,39,0.22); }
+    .password-field { position:relative; }
+    .password-field input { padding-right:84px; }
+    .password-toggle {
+      position:absolute; top:50%; right:6px; transform:translateY(-50%);
+      min-width:70px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      padding:0 10px; border:0; border-radius:8px; background:transparent; color:#5b5138;
+      font:600 13px/1 inherit; cursor:pointer; touch-action:manipulation;
+      transition:background-color 0.2s, color 0.2s;
+    }
+    .password-toggle:hover { background:#ebe7dc; color:#1a1a1a; }
+    .password-toggle:focus-visible, .forgot-link:focus-visible, .dialog-close:focus-visible {
+      outline:3px solid rgba(201,162,39,0.45); outline-offset:2px;
+    }
+    .password-toggle svg { width:18px; height:18px; flex:none; }
+    .form-actions { display:flex; justify-content:flex-end; margin:-8px 0 16px; }
+    .forgot-link {
+      min-height:44px; padding:8px 0 8px 12px; border:0; background:transparent;
+      color:#745b0b; font:600 14px/1.4 inherit; cursor:pointer; text-decoration:underline;
+      text-underline-offset:3px; touch-action:manipulation;
+    }
+    .forgot-link:hover { color:#3f3208; }
     .btn-login {
       width:100%; padding:15px; background:#c9a227;
       color:#1a1a1a; border:none; border-radius:10px;
@@ -39,7 +61,35 @@
     }
     .btn-login:hover { opacity:0.9; transform:translateY(-1px); }
     .btn-login:active { transform:translateY(0); }
-    .error-msg { color:#ff6b6b; font-size:13px; text-align:center; margin-top:12px; display:none; }
+    .btn-login:focus-visible { outline:3px solid rgba(201,162,39,0.45); outline-offset:3px; }
+    .btn-login:disabled { cursor:not-allowed; opacity:0.65; transform:none; }
+    .error-msg { color:#b42318; font-size:13px; text-align:center; margin-top:12px; display:none; }
+    .recovery-dialog {
+      width:min(420px, calc(100% - 32px)); padding:0; border:1px solid #e0ddd5;
+      border-radius:16px; color:#1a1a1a; background:#fff;
+      box-shadow:0 24px 72px rgba(30,24,10,0.28);
+    }
+    .recovery-dialog::backdrop { background:rgba(30,26,18,0.55); }
+    .dialog-content { padding:28px; }
+    .dialog-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+    .dialog-header h2 { margin:0; font-size:21px; color:#1a1a1a; }
+    .dialog-close {
+      width:44px; height:44px; margin:-10px -10px 0 0; border:0; border-radius:10px;
+      display:grid; place-items:center; background:transparent; color:#5d5a52; cursor:pointer;
+    }
+    .dialog-close:hover { background:#f1efe9; color:#1a1a1a; }
+    .dialog-close svg { width:22px; height:22px; }
+    .recovery-dialog p { margin:14px 0 0; color:#59564e; font-size:15px; line-height:1.6; }
+    .recovery-note { padding:14px 16px; border-radius:10px; background:#f7f2df; border:1px solid #eadca6; }
+    .dialog-done { margin-top:22px; }
+    @media (max-width:480px) {
+      body { padding:16px; }
+      .login-card { padding:36px 24px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      .login-card { animation:none; }
+      *, *::before, *::after { scroll-behavior:auto !important; transition-duration:0.01ms !important; }
+    }
     @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
   </style>
 </head>
@@ -50,33 +100,93 @@
       <h1>Kanlungan Coffee Garage</h1>
       <p>Admin Dashboard</p>
     </div>
-    <form id="loginForm">
+    <form id="loginForm" novalidate>
       <div class="form-group">
-        <label>Username</label>
+        <label for="username">Username</label>
         <input type="text" id="username" placeholder="admin" autocomplete="username" required/>
       </div>
       <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required/>
+        <label for="password">Password</label>
+        <div class="password-field">
+          <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required/>
+          <button type="button" class="password-toggle" id="passwordToggle" aria-controls="password" aria-pressed="false" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <span id="passwordToggleText">Show</span>
+          </button>
+        </div>
       </div>
-      <button type="submit" class="btn-login">Sign In</button>
-      <div class="error-msg" id="errorMsg">Invalid username or password.</div>
+      <div class="form-actions">
+        <button type="button" class="forgot-link" id="forgotPassword">Forgot password?</button>
+      </div>
+      <button type="submit" class="btn-login" id="loginButton">Sign In</button>
+      <div class="error-msg" id="errorMsg" role="alert" aria-live="polite">Invalid username or password.</div>
     </form>
   </div>
+  <dialog class="recovery-dialog" id="recoveryDialog" aria-labelledby="recoveryTitle">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h2 id="recoveryTitle">Password recovery</h2>
+        <button type="button" class="dialog-close" id="closeRecovery" aria-label="Close password recovery">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18"/>
+          </svg>
+        </button>
+      </div>
+      <p>The admin password is managed securely in the website’s server settings.</p>
+      <p class="recovery-note">Ask the website owner or hosting administrator to update the <strong>ADMIN_PASSWORD</strong> setting, then sign in with the new password.</p>
+      <button type="button" class="btn-login dialog-done" id="recoveryDone">Back to sign in</button>
+    </div>
+  </dialog>
   <script src="js/auth.js"></script>
   <script>
     // Redirect if already logged in
     if (sessionStorage.getItem('kape_admin_session')) window.location.href = 'index.html';
 
+    const passwordInput = document.getElementById('password');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const passwordToggleText = document.getElementById('passwordToggleText');
+    const recoveryDialog = document.getElementById('recoveryDialog');
+    const forgotPassword = document.getElementById('forgotPassword');
+    const loginButton = document.getElementById('loginButton');
+    const errorMsg = document.getElementById('errorMsg');
+
+    passwordToggle.addEventListener('click', () => {
+      const showPassword = passwordInput.type === 'password';
+      passwordInput.type = showPassword ? 'text' : 'password';
+      passwordToggle.setAttribute('aria-pressed', String(showPassword));
+      passwordToggle.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+      passwordToggleText.textContent = showPassword ? 'Hide' : 'Show';
+      passwordInput.focus();
+    });
+
+    forgotPassword.addEventListener('click', () => recoveryDialog.showModal());
+    document.getElementById('closeRecovery').addEventListener('click', () => recoveryDialog.close());
+    document.getElementById('recoveryDone').addEventListener('click', () => recoveryDialog.close());
+    recoveryDialog.addEventListener('click', (event) => {
+      if (event.target === recoveryDialog) recoveryDialog.close();
+    });
+    recoveryDialog.addEventListener('close', () => forgotPassword.focus());
+
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!e.currentTarget.reportValidity()) return;
       const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
+      const password = passwordInput.value;
+      errorMsg.style.display = 'none';
+      loginButton.disabled = true;
+      loginButton.textContent = 'Signing in…';
       const result = await login(username, password);
       if (result.success) {
         window.location.href = 'index.html';
       } else {
-        document.getElementById('errorMsg').style.display = 'block';
+        errorMsg.textContent = result.error || 'Invalid username or password.';
+        errorMsg.style.display = 'block';
+        passwordInput.focus();
+        loginButton.disabled = false;
+        loginButton.textContent = 'Sign In';
       }
     });
   </script>

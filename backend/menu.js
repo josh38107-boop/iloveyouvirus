@@ -57,6 +57,42 @@ function validateItemInput(input) {
   };
 }
 
+function validateModifierGroupInput(input) {
+  const name = String(input?.name || '').trim();
+  const required = input?.required;
+  const maxSelections = Number(input?.max_selections);
+  if (!name) throw httpError(400, 'Enter a modifier group name.');
+  if (name.length > 80) throw httpError(400, 'Modifier group name must be 80 characters or fewer.');
+  if (typeof required !== 'boolean') throw httpError(400, 'Required must be true or false.');
+  if (!Number.isSafeInteger(maxSelections) || maxSelections < 1 || maxSelections > 20) {
+    throw httpError(400, 'Maximum selections must be a whole number from 1 to 20.');
+  }
+  const id = normalizeMenuId(name);
+  if (!id) throw httpError(400, 'Modifier group name must contain at least one letter or number.');
+  return { id, name, required, maxSelections };
+}
+
+function validateModifierOptionInput(input) {
+  const name = String(input?.name || '').trim();
+  const price = Number(input?.price_delta_cents);
+  const ingredientId = String(input?.ingredient_id || '').trim();
+  const replacementId = String(input?.replaces_ingredient_id || '').trim();
+  const quantity = ingredientId ? Number(input?.quantity_used) : 0;
+  if (!name) throw httpError(400, 'Enter an option name.');
+  if (name.length > 80) throw httpError(400, 'Option name must be 80 characters or fewer.');
+  if (!Number.isSafeInteger(price) || price < 0) throw httpError(400, 'Price add-on must be zero or greater.');
+  if (!ingredientId && (replacementId || Number(input?.quantity_used) > 0)) {
+    throw httpError(400, 'Choose an ingredient before entering an inventory deduction.');
+  }
+  if (ingredientId && (!Number.isFinite(quantity) || quantity <= 0)) {
+    throw httpError(400, 'Inventory deduction must be greater than zero.');
+  }
+  return {
+    name, price, ingredientId: ingredientId || null, quantity,
+    replacementId: replacementId || null
+  };
+}
+
 function createMenuService(db, options = {}) {
   const branchId = options.branchId || 'main';
   const clock = options.now || Date.now;
@@ -98,24 +134,152 @@ function createMenuService(db, options = {}) {
   async function list() {
     const hidden = `NOT EXISTS (SELECT 1 FROM sync_tombstone tombstone
       WHERE tombstone.branch_id=$1 AND tombstone.entity_type=$2 AND tombstone.entity_id=`;
-    const [categories, items, groups, assignments, ingredients, recipes] = await Promise.all([
+    const [categories, items, groups, options, assignments, ingredients, recipes, modifierRecipes] = await Promise.all([
       db.query(`SELECT * FROM menu_category category WHERE ${hidden}category.id) ORDER BY sort_order,name`, [branchId, 'menu_category']),
       db.query(`SELECT item.* FROM menu_item item JOIN menu_category category ON category.id=item.category_id
         WHERE ${hidden}item.id) AND NOT EXISTS (SELECT 1 FROM sync_tombstone t
           WHERE t.branch_id=$1 AND t.entity_type='menu_category' AND t.entity_id=category.id)
         ORDER BY item.name`, [branchId, 'menu_item']),
       db.query(`SELECT * FROM modifier_group group_row WHERE ${hidden}group_row.id) ORDER BY name`, [branchId, 'modifier_group']),
+      db.query(`SELECT option.* FROM modifier_option option JOIN modifier_group group_row ON group_row.id=option.group_id
+        WHERE ${hidden}option.id) AND NOT EXISTS (SELECT 1 FROM sync_tombstone tombstone
+          WHERE tombstone.branch_id=$1 AND tombstone.entity_type='modifier_group' AND tombstone.entity_id=group_row.id)
+        ORDER BY option.group_id,option.name`, [branchId, 'modifier_option']),
       db.query(`SELECT link.* FROM menu_item_modifier_group link JOIN menu_item item ON item.id=link.item_id
         WHERE ${hidden}(link.item_id || '|' || link.group_id))`, [branchId, 'menu_item_modifier_group']),
       db.query(`SELECT ingredient.id,ingredient.name,ingredient.unit FROM ingredient
         WHERE ${hidden}ingredient.id) ORDER BY ingredient.name`, [branchId, 'ingredient']),
       db.query(`SELECT recipe.* FROM recipe_ingredient recipe JOIN menu_item item ON item.id=recipe.item_id
-        WHERE ${hidden}(recipe.item_id || '|' || recipe.ingredient_id))`, [branchId, 'recipe_ingredient'])
+        WHERE ${hidden}(recipe.item_id || '|' || recipe.ingredient_id))`, [branchId, 'recipe_ingredient']),
+      db.query(`SELECT recipe.* FROM modifier_recipe_ingredient recipe JOIN modifier_option option ON option.id=recipe.option_id
+        WHERE ${hidden}(recipe.option_id || '|' || recipe.ingredient_id))`, [branchId, 'modifier_recipe_ingredient'])
     ]);
     return {
       categories: categories.rows, items: items.rows, modifierGroups: groups.rows,
-      itemModifierGroups: assignments.rows, ingredients: ingredients.rows, recipes: recipes.rows
+      modifierOptions: options.rows, itemModifierGroups: assignments.rows,
+      ingredients: ingredients.rows, recipes: recipes.rows, modifierRecipes: modifierRecipes.rows
     };
+  }
+
+  async function validateModifierRecipeReferences(client, data) {
+    const ingredientIds = [...new Set([data.ingredientId, data.replacementId].filter(Boolean))];
+    if (!ingredientIds.length) return;
+    const result = await client.query('SELECT id FROM ingredient WHERE id=ANY($1::text[])', [ingredientIds]);
+    if (result.rowCount !== ingredientIds.length) throw httpError(400, 'Choose an available inventory ingredient.');
+  }
+
+  async function replaceModifierRecipe(client, optionId, data) {
+    const oldRecipes = await client.query('SELECT * FROM modifier_recipe_ingredient WHERE option_id=$1', [optionId]);
+    for (const row of oldRecipes.rows) {
+      if (row.ingredient_id !== data.ingredientId) {
+        await upsertTombstone(client, 'modifier_recipe_ingredient', `${optionId}|${row.ingredient_id}`);
+      }
+    }
+    await client.query('DELETE FROM modifier_recipe_ingredient WHERE option_id=$1', [optionId]);
+    if (!data.ingredientId) return null;
+    const recipe = (await client.query(`INSERT INTO modifier_recipe_ingredient
+      (option_id,ingredient_id,quantity_used,replaces_ingredient_id) VALUES($1,$2,$3,$4) RETURNING *`,
+      [optionId, data.ingredientId, data.quantity, data.replacementId])).rows[0];
+    await recordChange(client, 'modifier_recipe_ingredient', `${optionId}|${data.ingredientId}`, 'upsert', recipe);
+    return recipe;
+  }
+
+  async function createModifierGroup(input) {
+    const data = validateModifierGroupInput(input);
+    return transaction(async client => {
+      const existing = await client.query('SELECT id FROM modifier_group WHERE id=$1 FOR UPDATE', [data.id]);
+      if (existing.rowCount) throw httpError(409, 'A modifier group with that name already exists.');
+      const deleted = await client.query(`SELECT 1 FROM sync_tombstone WHERE branch_id=$1
+        AND entity_type='modifier_group' AND entity_id=$2 LIMIT 1`, [branchId, data.id]);
+      if (deleted.rowCount) throw httpError(409, 'That modifier group name was previously deleted. Use a different name.');
+      const group = (await client.query(`INSERT INTO modifier_group(id,name,required,max_selections)
+        VALUES($1,$2,$3,$4) RETURNING *`, [data.id, data.name, data.required, data.maxSelections])).rows[0];
+      await recordChange(client, 'modifier_group', group.id, 'upsert', group);
+      return group;
+    });
+  }
+
+  async function updateModifierGroup(id, input) {
+    const groupId = String(id || '').trim();
+    const data = validateModifierGroupInput(input);
+    return transaction(async client => {
+      const existing = await client.query('SELECT 1 FROM modifier_group WHERE id=$1 FOR UPDATE', [groupId]);
+      if (!existing.rowCount) throw httpError(404, 'Modifier group not found. Refresh the page and try again.');
+      const group = (await client.query(`UPDATE modifier_group SET name=$2,required=$3,max_selections=$4
+        WHERE id=$1 RETURNING *`, [groupId, data.name, data.required, data.maxSelections])).rows[0];
+      await recordChange(client, 'modifier_group', groupId, 'upsert', group);
+      return group;
+    });
+  }
+
+  async function deleteModifierGroup(id) {
+    const groupId = String(id || '').trim();
+    return transaction(async client => {
+      const group = await client.query('SELECT * FROM modifier_group WHERE id=$1 FOR UPDATE', [groupId]);
+      if (!group.rowCount) throw httpError(404, 'Modifier group not found. Refresh the page and try again.');
+      const assignments = await client.query('SELECT * FROM menu_item_modifier_group WHERE group_id=$1', [groupId]);
+      const options = await client.query('SELECT * FROM modifier_option WHERE group_id=$1', [groupId]);
+      const recipes = await client.query(`SELECT recipe.* FROM modifier_recipe_ingredient recipe
+        JOIN modifier_option option ON option.id=recipe.option_id WHERE option.group_id=$1`, [groupId]);
+      for (const row of assignments.rows) await upsertTombstone(client, 'menu_item_modifier_group', `${row.item_id}|${groupId}`);
+      for (const row of recipes.rows) await upsertTombstone(client, 'modifier_recipe_ingredient', `${row.option_id}|${row.ingredient_id}`);
+      for (const row of options.rows) await upsertTombstone(client, 'modifier_option', row.id);
+      await upsertTombstone(client, 'modifier_group', groupId);
+      await client.query('DELETE FROM menu_item_modifier_group WHERE group_id=$1', [groupId]);
+      await client.query('DELETE FROM modifier_recipe_ingredient WHERE option_id IN (SELECT id FROM modifier_option WHERE group_id=$1)', [groupId]);
+      await client.query('DELETE FROM modifier_option WHERE group_id=$1', [groupId]);
+      await client.query('DELETE FROM modifier_group WHERE id=$1', [groupId]);
+      return { id: groupId, name: group.rows[0].name, deleted: true,
+        itemLinks: assignments.rowCount, options: options.rowCount, recipeLinks: recipes.rowCount };
+    });
+  }
+
+  async function createModifierOption(groupId, input) {
+    const modifierGroupId = String(groupId || '').trim();
+    const data = validateModifierOptionInput(input);
+    return transaction(async client => {
+      const group = await client.query('SELECT 1 FROM modifier_group WHERE id=$1 FOR UPDATE', [modifierGroupId]);
+      if (!group.rowCount) throw httpError(404, 'Modifier group not found. Refresh the page and try again.');
+      await validateModifierRecipeReferences(client, data);
+      const stem = `${normalizeMenuId(modifierGroupId)}-${normalizeMenuId(data.name)}` || 'modifier-option';
+      const optionId = `${stem}-${randomId()}`;
+      const existing = await client.query('SELECT 1 FROM modifier_option WHERE id=$1', [optionId]);
+      if (existing.rowCount) throw httpError(409, 'Could not generate a unique option ID. Try saving again.');
+      const option = (await client.query(`INSERT INTO modifier_option(id,group_id,name,price_delta_cents)
+        VALUES($1,$2,$3,$4) RETURNING *`, [optionId, modifierGroupId, data.name, data.price])).rows[0];
+      await recordChange(client, 'modifier_option', optionId, 'upsert', option);
+      const inventoryRecipe = await replaceModifierRecipe(client, optionId, data);
+      return { ...option, inventory_recipe: inventoryRecipe };
+    });
+  }
+
+  async function updateModifierOption(id, input) {
+    const optionId = String(id || '').trim();
+    const data = validateModifierOptionInput(input);
+    return transaction(async client => {
+      const existing = await client.query('SELECT * FROM modifier_option WHERE id=$1 FOR UPDATE', [optionId]);
+      if (!existing.rowCount) throw httpError(404, 'Modifier option not found. Refresh the page and try again.');
+      await validateModifierRecipeReferences(client, data);
+      const option = (await client.query(`UPDATE modifier_option SET name=$2,price_delta_cents=$3
+        WHERE id=$1 RETURNING *`, [optionId, data.name, data.price])).rows[0];
+      await recordChange(client, 'modifier_option', optionId, 'upsert', option);
+      const inventoryRecipe = await replaceModifierRecipe(client, optionId, data);
+      return { ...option, inventory_recipe: inventoryRecipe };
+    });
+  }
+
+  async function deleteModifierOption(id) {
+    const optionId = String(id || '').trim();
+    return transaction(async client => {
+      const option = await client.query('SELECT * FROM modifier_option WHERE id=$1 FOR UPDATE', [optionId]);
+      if (!option.rowCount) throw httpError(404, 'Modifier option not found. Refresh the page and try again.');
+      const recipes = await client.query('SELECT * FROM modifier_recipe_ingredient WHERE option_id=$1', [optionId]);
+      for (const row of recipes.rows) await upsertTombstone(client, 'modifier_recipe_ingredient', `${optionId}|${row.ingredient_id}`);
+      await upsertTombstone(client, 'modifier_option', optionId);
+      await client.query('DELETE FROM modifier_recipe_ingredient WHERE option_id=$1', [optionId]);
+      await client.query('DELETE FROM modifier_option WHERE id=$1', [optionId]);
+      return { id: optionId, name: option.rows[0].name, deleted: true, recipeLinks: recipes.rowCount };
+    });
   }
 
   async function createCategory(input) {
@@ -252,8 +416,12 @@ function createMenuService(db, options = {}) {
     list, createCategory, updateCategory, deleteCategory,
     createItem: input => saveItem(null, input, true),
     updateItem: (id, input) => saveItem(id, input, false),
-    deleteItem
+    deleteItem, createModifierGroup, updateModifierGroup, deleteModifierGroup,
+    createModifierOption, updateModifierOption, deleteModifierOption
   };
 }
 
-module.exports = { createMenuService, normalizeMenuId, validateCategoryInput, validateItemInput };
+module.exports = {
+  createMenuService, normalizeMenuId, validateCategoryInput, validateItemInput,
+  validateModifierGroupInput, validateModifierOptionInput
+};

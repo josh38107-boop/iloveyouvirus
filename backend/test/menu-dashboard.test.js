@@ -14,8 +14,8 @@ test('menu dashboard inline JavaScript parses', () => {
   for (const source of scripts) assert.doesNotThrow(() => new vm.Script(source));
 });
 
-test('menu dashboard exposes full POS item and category controls', () => {
-  for (const marker of ['Add Menu Item', 'Manage Categories', 'Recipe Deduction', 'Modifiers',
+test('menu dashboard exposes full POS item, category, and modifier controls', () => {
+  for (const marker of ['Add Menu Item', 'Manage Categories', 'Manage Modifiers', 'Recipe Deduction', 'Modifiers',
     'Complementary (Do Not Deduct)', 'Active on POS', 'data-edit-item', 'data-delete-item']) {
     assert.match(dashboard, new RegExp(marker.replace(/[()]/g, '\\$&')));
   }
@@ -29,6 +29,10 @@ test('menu dashboard exposes full POS item and category controls', () => {
   assert.match(dashboard, /aria-controls="recipeList"/);
   assert.match(dashboard, /aria-expanded="false"/);
   assert.match(dashboard, /Show Recipe Only/);
+  assert.match(dashboard, /id="modifierGroupForm"/);
+  assert.match(dashboard, /id="modifierOptionArea"/);
+  assert.match(dashboard, /Inventory deduction \(optional\)/);
+  assert.match(dashboard, /aria-live="polite"/);
 });
 
 test('recipe editor progressively reveals ingredients without losing the draft', () => {
@@ -65,7 +69,9 @@ test('recipe editor progressively reveals ingredients without losing the draft',
 
 test('menu dashboard uses only dedicated mutation endpoints and safe rendering', () => {
   for (const method of ['getMenuManagement', 'createMenuCategory', 'updateMenuCategory',
-    'deleteMenuCategory', 'createMenuItem', 'updateMenuItem', 'deleteMenuItem']) {
+    'deleteMenuCategory', 'createMenuItem', 'updateMenuItem', 'deleteMenuItem',
+    'createModifierGroup', 'updateModifierGroup', 'deleteModifierGroup',
+    'createModifierOption', 'updateModifierOption', 'deleteModifierOption']) {
     assert.match(api, new RegExp(method));
   }
   assert.match(dashboard, /escapeHtml\(item\.name\)/);

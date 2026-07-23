@@ -234,7 +234,11 @@ async function handleRpc(req, res) {
   try {
     const normalized = {};
     for (const [key, value] of Object.entries(req.body || {})) normalized[key.startsWith('p_') ? key.slice(2) : key] = value;
-    if (req.syncDevice) normalized.authenticated_device_id = req.syncDevice.id;
+    if (req.syncDevice) {
+      normalized.authenticated_device_id = req.syncDevice.id;
+      normalized.device_id = req.syncDevice.id;
+      normalized.branch_id = req.syncDevice.branch_id;
+    }
     const result = await handler(normalized, db);
     return res.json(result);
   } catch (err) {
@@ -454,6 +458,36 @@ app.put('/admin/menu/items/:id', adminAuthenticate, async (req, res) => {
 app.delete('/admin/menu/items/:id', adminAuthenticate, async (req, res) => {
   try { res.json(await menu.deleteItem(req.params.id)); }
   catch (err) { console.error('DELETE /admin/menu/items/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/menu/modifier-groups', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await menu.createModifierGroup(req.body)); }
+  catch (err) { console.error('POST /admin/menu/modifier-groups:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/menu/modifier-groups/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.updateModifierGroup(req.params.id, req.body)); }
+  catch (err) { console.error('PUT /admin/menu/modifier-groups/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/menu/modifier-groups/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.deleteModifierGroup(req.params.id)); }
+  catch (err) { console.error('DELETE /admin/menu/modifier-groups/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/menu/modifier-groups/:id/options', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await menu.createModifierOption(req.params.id, req.body)); }
+  catch (err) { console.error('POST /admin/menu/modifier-groups/:id/options:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/menu/modifier-options/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.updateModifierOption(req.params.id, req.body)); }
+  catch (err) { console.error('PUT /admin/menu/modifier-options/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/menu/modifier-options/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await menu.deleteModifierOption(req.params.id)); }
+  catch (err) { console.error('DELETE /admin/menu/modifier-options/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
 });
 
 app.get('/admin/employees', adminAuthenticate, async (req, res) => {

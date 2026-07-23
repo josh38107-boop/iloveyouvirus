@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  createMenuService, normalizeMenuId, validateCategoryInput, validateItemInput
+  createMenuService, normalizeMenuId, validateCategoryInput, validateItemInput,
+  validateModifierGroupInput, validateModifierOptionInput
 } = require('../menu');
 
 const validItem = {
@@ -40,6 +41,41 @@ test('validates the complete POS-style item payload', () => {
   assert.throws(() => validateItemInput({ ...validItem, base_price_cents: 0 }), /greater than/);
   assert.throws(() => validateItemInput({ ...validItem, recipe: [] }), /at least one/);
   assert.throws(() => validateItemInput({ ...validItem, active: 'true' }), /true or false/);
+});
+
+test('validates modifier groups and inventory-linked options', () => {
+  assert.deepEqual(validateModifierGroupInput({ name: ' Add-ons ', required: false, max_selections: 2 }), {
+    id: 'add-ons', name: 'Add-ons', required: false, maxSelections: 2
+  });
+  assert.throws(() => validateModifierGroupInput({ name: 'Milk', required: false, max_selections: 0 }), /whole number/);
+  assert.deepEqual(validateModifierOptionInput({
+    name: 'Extra Shot', price_delta_cents: 25, ingredient_id: 'beans', quantity_used: 9,
+    replaces_ingredient_id: ''
+  }), { name: 'Extra Shot', price: 25, ingredientId: 'beans', quantity: 9, replacementId: null });
+  assert.throws(() => validateModifierOptionInput({
+    name: 'Extra Shot', price_delta_cents: 25, ingredient_id: '', quantity_used: 9
+  }), /Choose an ingredient/);
+});
+
+test('creates a modifier option and its inventory deduction atomically', async () => {
+  const { db, queries } = mockDb(sql => {
+    if (sql.startsWith('SELECT 1 FROM modifier_group')) return { rows: [{}], rowCount: 1 };
+    if (sql.startsWith('SELECT id FROM ingredient')) return { rows: [{ id: 'beans' }], rowCount: 1 };
+    if (sql.startsWith('SELECT 1 FROM modifier_option')) return { rows: [], rowCount: 0 };
+    if (sql.startsWith('INSERT INTO modifier_option')) return { rows: [{ id: 'shots-extra-shot-abc123', group_id: 'shots', name: 'Extra Shot', price_delta_cents: 25 }], rowCount: 1 };
+    if (sql.startsWith('SELECT * FROM modifier_recipe_ingredient')) return { rows: [], rowCount: 0 };
+    if (sql.startsWith('DELETE FROM modifier_recipe_ingredient')) return { rows: [], rowCount: 0 };
+    if (sql.startsWith('INSERT INTO modifier_recipe_ingredient')) return { rows: [{ option_id: 'shots-extra-shot-abc123', ingredient_id: 'beans', quantity_used: 9 }], rowCount: 1 };
+    if (sql.startsWith('INSERT INTO sync_change')) return { rows: [], rowCount: 1 };
+    throw new Error(`Unexpected SQL: ${sql}`);
+  });
+  const result = await createMenuService(db, { randomId: () => 'abc123' }).createModifierOption('shots', {
+    name: 'Extra Shot', price_delta_cents: 25, ingredient_id: 'beans', quantity_used: 9
+  });
+  assert.equal(result.id, 'shots-extra-shot-abc123');
+  assert.equal(result.inventory_recipe.quantity_used, 9);
+  assert.equal(queries.filter(query => query.sql.startsWith('INSERT INTO sync_change')).length, 2);
+  assert.equal(queries.at(-1).sql, 'COMMIT');
 });
 
 test('creates a category with the next sort order and a sync change', async () => {
