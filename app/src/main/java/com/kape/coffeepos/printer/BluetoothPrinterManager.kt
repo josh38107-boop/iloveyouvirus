@@ -1,6 +1,8 @@
 package com.kape.coffeepos.printer
 
 import com.kape.coffeepos.FACEBOOK_PAGE_URL
+import com.kape.coffeepos.RECEIPT_DISCLAIMER_LINE
+import com.kape.coffeepos.RECEIPT_THANK_YOU_LINE
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -49,6 +51,38 @@ data class PrinterProfile(
 const val PRINTER_INTERFACE_BLUETOOTH = "Bluetooth"
 const val PRINTER_INTERFACE_WINDOWS_BRIDGE = "Windows Bridge"
 const val DEFAULT_WINDOWS_BRIDGE_PRINT_URL = "http://127.0.0.1:9123/print"
+
+private val RECEIPT_ITEM_PREFIX = Regex("^\\d+\\s+x\\s+")
+
+private fun takePrinterTextSegment(text: String, maxLength: Int): Pair<String, String> {
+    val remainingText = text.trimStart()
+    if (remainingText.length <= maxLength) return remainingText to ""
+
+    val boundary = remainingText.lastIndexOf(' ', startIndex = maxLength)
+    val splitAt = if (boundary > 0) boundary else maxLength
+    return remainingText.substring(0, splitAt).trimEnd() to
+        remainingText.substring(splitAt).trimStart()
+}
+
+internal fun formatAlignedPrinterRow(left: String, right: String, width: Int): List<String> {
+    require(width > 0) { "Receipt width must be positive." }
+    require(right.length < width) { "The right column must fit within the receipt width." }
+
+    val firstLeftWidth = (width - right.length - 1).coerceAtLeast(1)
+    val (firstPart, initialRemainder) = takePrinterTextSegment(left.trim(), firstLeftWidth)
+    val gap = (width - firstPart.length - right.length).coerceAtLeast(1)
+    val result = mutableListOf(firstPart + " ".repeat(gap) + right)
+
+    val continuationIndent = RECEIPT_ITEM_PREFIX.find(left.trim())?.value?.length ?: 0
+    val continuationWidth = (width - continuationIndent).coerceAtLeast(1)
+    var remainder = initialRemainder
+    while (remainder.isNotEmpty()) {
+        val (part, next) = takePrinterTextSegment(remainder, continuationWidth)
+        result += " ".repeat(continuationIndent) + part
+        remainder = next
+    }
+    return result
+}
 
 class BluetoothPrinterManager(context: Context) {
     private val appContext = context.applicationContext
@@ -299,11 +333,32 @@ class BluetoothPrinterManager(context: Context) {
         )
     }
 
+    suspend fun printQrTest(promotionQrPayload: String?): PrinterResult = withContext(Dispatchers.IO) {
+        val promotionStatus = if (promotionQrPayload == null) {
+            "Promotion QR unavailable:\nset a valid prefilled Google Form\non the admin website."
+        } else {
+            "The promotion QR below is a test.\nQR PRINTER TEST\nNOT A VALID REWARD"
+        }
+        printInternal(
+            text = """
+                Kanlungan POS
+                QR Printer Test
+
+                $promotionStatus
+            """.trimIndent(),
+            promotionQrPayload = promotionQrPayload,
+            includeSocialQr = true,
+            allowCashDrawerKick = false,
+            qrTestMode = true
+        )
+    }
+
     private suspend fun printInternal(
         text: String,
         promotionQrPayload: String?,
         includeSocialQr: Boolean,
-        allowCashDrawerKick: Boolean
+        allowCashDrawerKick: Boolean,
+        qrTestMode: Boolean = false
     ): PrinterResult {
         val profile = printerProfile
         val lineChars = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
@@ -380,32 +435,42 @@ class BluetoothPrinterManager(context: Context) {
             
             if (promotionQrPayload != null) {
                 activeSocket.outputStream.write(byteArrayOf(0x1B, 0x61, 0x01))
-                activeSocket.outputStream.write("\nScan to claim your free drink\n".toByteArray(Charsets.UTF_8))
+                val label = if (qrTestMode) {
+                    "\nPromotion QR Test\nNOT A VALID REWARD\n"
+                } else {
+                    "\nScan to claim your free drink\n"
+                }
+                activeSocket.outputStream.write(label.toByteArray(Charsets.UTF_8))
                 writeQrCode(activeSocket.outputStream, promotionQrPayload)
                 activeSocket.outputStream.write(byteArrayOf(0x1B, 0x61, 0x00))
             }
 
-            if (includeSocialQr) try {
+            if (includeSocialQr) {
                 // 1. Center alignment
                 activeSocket.outputStream.write(byteArrayOf(0x1B.toByte(), 0x61.toByte(), 0x01.toByte()))
                 
                 // Add spacing and optional label text
-                activeSocket.outputStream.write("\nScan and Follow Us!\n".toByteArray(Charsets.UTF_8))
+                val socialLabel = if (qrTestMode) "\nFacebook QR Test\n" else "\nScan and Follow Us!\n"
+                activeSocket.outputStream.write(socialLabel.toByteArray(Charsets.UTF_8))
                 
                 writeQrCode(activeSocket.outputStream, FACEBOOK_PAGE_URL)
                 
-                // 6.5. Print "Not Official Receipt!" below QR code
-                activeSocket.outputStream.write("\nNot Official Receipt!\n".toByteArray(Charsets.UTF_8))
+                activeSocket.outputStream.write(
+                    "\n$RECEIPT_THANK_YOU_LINE\n$RECEIPT_DISCLAIMER_LINE\n".toByteArray(Charsets.UTF_8)
+                )
                 
                 // 7. Restore Left alignment
                 activeSocket.outputStream.write(byteArrayOf(0x1B.toByte(), 0x61.toByte(), 0x00.toByte()))
-            } catch (_: Exception) {
-                // Ignore any QR code writing errors so printing the main receipt doesn't fail
             }
 
             activeSocket.outputStream.write("\n\n\n\n".toByteArray(Charsets.UTF_8))
             activeSocket.outputStream.flush()
-            PrinterResult(true, "Receipt sent to ${target.name}.", target)
+            val successMessage = if (qrTestMode) {
+                "QR test sent to ${target.name}."
+            } else {
+                "Receipt sent to ${target.name}."
+            }
+            PrinterResult(true, successMessage, target)
         } catch (error: IOException) {
             closeSocket()
             printViaWindowsBridge(formattedText, profile.bridgeUrl, promotionQrPayload) ?: PrinterResult(false, "Printer unavailable. Check Bluetooth and reconnect.")
@@ -413,15 +478,9 @@ class BluetoothPrinterManager(context: Context) {
     }
 
     private fun writeQrCode(output: java.io.OutputStream, payload: String) {
-        val dataBytes = payload.toByteArray(Charsets.UTF_8)
-        require(dataBytes.size <= 7089) { "QR payload is too long." }
-        output.write(byteArrayOf(0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00))
-        output.write(byteArrayOf(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 0x06))
-        output.write(byteArrayOf(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x30))
-        val length = dataBytes.size + 3
-        output.write(byteArrayOf(0x1D, 0x28, 0x6B, (length % 256).toByte(), (length / 256).toByte(), 0x31, 0x50, 0x30))
-        output.write(dataBytes)
-        output.write(byteArrayOf(0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30))
+        output.write("\n".toByteArray(Charsets.ISO_8859_1))
+        output.write(qrRasterCommand(payload))
+        output.write("\n".toByteArray(Charsets.ISO_8859_1))
     }
 
     private fun printViaWindowsBridge(
@@ -477,16 +536,19 @@ class BluetoothPrinterManager(context: Context) {
         val textWithCurrency = text.replace("₱", pesoReplacement)
         val lines = textWithCurrency.lines()
         val resultLines = mutableListOf<String>()
+        var itemContinuationIndent: Int? = null
         
         for (line in lines) {
             val trimmed = line.trim()
             if (trimmed.isEmpty()) {
                 resultLines.add("")
+                itemContinuationIndent = null
                 continue
             }
             
             if (trimmed.all { it == '-' }) {
                 resultLines.add("-".repeat(W))
+                itemContinuationIndent = null
                 continue
             }
             
@@ -501,12 +563,26 @@ class BluetoothPrinterManager(context: Context) {
                         if (idx == 0) indent + chunk else "    " + chunk
                     })
                 }
+                itemContinuationIndent = null
                 continue
             }
             
             if (line.startsWith(" ")) {
-                val pad = ((W - trimmed.length) / 2).coerceAtLeast(0)
-                resultLines.add(" ".repeat(pad) + trimmed)
+                val continuationIndent = itemContinuationIndent
+                val leadingSpaces = line.takeWhile { it == ' ' }.length
+                if (continuationIndent != null && leadingSpaces >= continuationIndent) {
+                    var remainder = trimmed
+                    val contentWidth = (W - continuationIndent).coerceAtLeast(1)
+                    while (remainder.isNotEmpty()) {
+                        val (part, next) = takePrinterTextSegment(remainder, contentWidth)
+                        resultLines.add(" ".repeat(continuationIndent) + part)
+                        remainder = next
+                    }
+                } else {
+                    val pad = ((W - trimmed.length) / 2).coerceAtLeast(0)
+                    resultLines.add(" ".repeat(pad) + trimmed)
+                    itemContinuationIndent = null
+                }
                 continue
             }
             
@@ -516,8 +592,8 @@ class BluetoothPrinterManager(context: Context) {
                 val left = line.substring(0, match.range.first).trim()
                 val right = line.substring(match.range.last + 1).trim()
                 
-                val space = (W - left.length - right.length).coerceAtLeast(1)
-                resultLines.add(left + " ".repeat(space) + right)
+                resultLines.addAll(formatAlignedPrinterRow(left, right, W))
+                itemContinuationIndent = RECEIPT_ITEM_PREFIX.find(left)?.value?.length
                 continue
             }
             
@@ -526,6 +602,7 @@ class BluetoothPrinterManager(context: Context) {
             } else {
                 resultLines.addAll(trimmed.chunked(W))
             }
+            itemContinuationIndent = null
         }
         return resultLines.joinToString("\n")
     }

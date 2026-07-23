@@ -18,10 +18,10 @@ const TABLES = {
   ingredient: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'unit', 'quantity_on_hand', 'low_stock_threshold', 'takeout_only'] },
   recipe_ingredient: { role: 'manager', keys: ['item_id', 'ingredient_id'], columns: ['item_id', 'ingredient_id', 'quantity_used'] },
   modifier_recipe_ingredient: { role: 'manager', keys: ['option_id', 'ingredient_id'], columns: ['option_id', 'ingredient_id', 'quantity_used', 'replaces_ingredient_id'] },
-  payment_method: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'enabled', 'is_system', 'payment_category'] },
+  payment_method: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'enabled', 'is_system', 'payment_category', 'created_at', 'updated_at'] },
   discount_rule: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'percent', 'scope', 'requires_reference', 'active', 'sort_order', 'created_at', 'updated_at'] },
   employee: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'pin', 'role', 'active'] },
-  store_settings: { role: 'manager', keys: ['id'], columns: ['id', 'store_name', 'tax_rate_percent', 'tip_presets', 'receipt_footer', 'senior_discount_percent', 'pwd_discount_percent', 'discount_settings_updated_at', 'void_refund_pin'] },
+  store_settings: { role: 'manager', keys: ['id'], columns: ['id', 'store_name', 'tax_rate_percent', 'tip_presets', 'receipt_footer', 'senior_discount_percent', 'pwd_discount_percent', 'discount_settings_updated_at', 'void_refund_pin', 'payment_void_settings_updated_at'] },
   sync_device_authority: { role: 'manager', keys: ['branch_id'], columns: ['branch_id', 'manager_device_id', 'manager_device_name', 'revision', 'updated_at'] },
   sync_tombstone: { role: 'manager', keys: ['branch_id', 'entity_type', 'entity_id'], columns: ['branch_id', 'entity_type', 'entity_id', 'deleted_by_device', 'deleted_at'] },
   shift: { role: 'counter', keys: ['device_id', 'id'], columns: ['device_id', 'id', 'employee_id', 'opened_at', 'closed_at', 'starting_cash_cents', 'ending_cash_cents', 'cash_added_cents', 'cash_removed_cents'] },
@@ -403,6 +403,9 @@ function createCloud(db) {
             entityId = record.ingredient_id;
           } else if (operation.type === 'tombstone') {
             requireRole(req.syncDevice, 'manager');
+            if (operation.data?.entity_type === 'payment_method') {
+              throw Object.assign(new Error('Manage payment methods in the admin website.'), { status: 403 });
+            }
             entity = 'sync_tombstone'; operationType = 'delete';
             record = await upsert(client, entity, { ...operation.data, branch_id: req.syncDevice.branch_id, deleted_by_device: req.syncDevice.hardware_id, deleted_at: operation.data?.deleted_at || now() });
             await applyTombstone(client, record); entityId = `${record.entity_type}:${record.entity_id}`;
@@ -411,6 +414,13 @@ function createCloud(db) {
             const config = TABLES[entity];
             if (!config) throw Object.assign(new Error(`Unsupported entity '${entity}'`), { status: 400 });
             requireRole(req.syncDevice, config.role);
+            if (entity === 'payment_method') {
+              throw Object.assign(new Error('Manage payment methods in the admin website.'), { status: 403 });
+            }
+            const operationData = entity === 'store_settings'
+              ? Object.fromEntries(Object.entries(operation.data || {}).filter(([key]) =>
+                  !['void_refund_pin', 'payment_void_settings_updated_at'].includes(key)))
+              : operation.data;
             const candidateId = config.keys.map(key => operation.data?.[key]).join('|');
             const tombstone = config.role === 'manager' && entity !== 'sync_tombstone'
               ? await client.query('SELECT * FROM sync_tombstone WHERE branch_id=$1 AND entity_type=$2 AND entity_id=$3 LIMIT 1', [req.syncDevice.branch_id, entity, candidateId])
@@ -418,7 +428,7 @@ function createCloud(db) {
             if (tombstone.rowCount) {
               record = tombstone.rows[0]; operationType = 'delete'; entityId = candidateId;
             } else {
-              record = await upsert(client, entity, operation.data);
+              record = await upsert(client, entity, operationData);
               operationType = 'upsert'; entityId = config.keys.map(key => record[key]).join('|');
             }
           }

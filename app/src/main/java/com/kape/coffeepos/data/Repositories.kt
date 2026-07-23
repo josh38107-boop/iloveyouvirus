@@ -51,6 +51,46 @@ internal fun isExcludedFromVoidRestoration(
 ): Boolean = ingredientId in otherExclusions ||
     (orderType == "Dine-In" && ingredientId in takeoutOnlyIngredientIds)
 
+private fun takeReceiptTextSegment(text: String, maxLength: Int): Pair<String, String> {
+    val remainingText = text.trimStart()
+    if (remainingText.length <= maxLength) return remainingText to ""
+
+    val boundary = remainingText.lastIndexOf(' ', startIndex = maxLength)
+    val splitAt = if (boundary > 0) boundary else maxLength
+    return remainingText.substring(0, splitAt).trimEnd() to
+        remainingText.substring(splitAt).trimStart()
+}
+
+internal fun formatReceiptItemLines(
+    quantity: Int,
+    itemName: String,
+    price: String,
+    width: Int
+): List<String> {
+    require(width > 0) { "Receipt width must be positive." }
+
+    val prefix = "$quantity x "
+    val normalizedName = itemName.replace(Regex("\\s+"), " ").trim()
+    val firstNameWidth = (width - prefix.length - price.length - 1).coerceAtLeast(0)
+    val (firstNamePart, initialRemainder) = if (firstNameWidth > 0) {
+        takeReceiptTextSegment(normalizedName, firstNameWidth)
+    } else {
+        "" to normalizedName
+    }
+    val firstLeft = prefix + firstNamePart
+    val firstGap = (width - firstLeft.length - price.length).coerceAtLeast(1)
+    val result = mutableListOf(firstLeft + " ".repeat(firstGap) + price)
+
+    val continuationWidth = (width - prefix.length).coerceAtLeast(1)
+    var remainder = initialRemainder
+    while (remainder.isNotEmpty()) {
+        val (part, next) = takeReceiptTextSegment(remainder, continuationWidth)
+        result += " ".repeat(prefix.length) + part
+        remainder = next
+    }
+    return result
+}
+
 data class MenuCatalog(
     val categories: List<MenuCategory> = emptyList(),
     val items: List<MenuItem> = emptyList(),
@@ -1180,16 +1220,9 @@ class OrderRepository(
             sb.appendLine(div)
             // Items
             for (line in lines) {
-                val cleanedName = line.item.name.replace('\n', ' ').replace('\r', ' ')
-                val qty = line.quantity
                 val price = formatPeso(line.lineTotalCents)
-                val qtyStr = "${qty} x $cleanedName"
-                if (qtyStr.length + price.length + 1 <= W) {
-                    sb.appendLine(row(qtyStr, price))
-                } else {
-                    sb.appendLine(qtyStr)
-                    sb.appendLine(row("", price))
-                }
+                formatReceiptItemLines(line.quantity, line.item.name, price, W)
+                    .forEach(sb::appendLine)
                 if (line.modifierLabel.isNotBlank()) {
                     sb.appendLine("  + ${line.modifierLabel}")
                 }
@@ -1260,16 +1293,9 @@ class OrderRepository(
             sb.appendLine(div)
             // Items
             for (line in lines) {
-                val cleanedName = line.item.name.replace('\n', ' ').replace('\r', ' ')
-                val qty = line.quantity
                 val price = formatPeso(line.lineTotalCents)
-                val qtyStr = "${qty} x $cleanedName"
-                if (qtyStr.length + price.length + 1 <= W) {
-                    sb.appendLine(row(qtyStr, price))
-                } else {
-                    sb.appendLine(qtyStr)
-                    sb.appendLine(row("", price))
-                }
+                formatReceiptItemLines(line.quantity, line.item.name, price, W)
+                    .forEach(sb::appendLine)
                 if (line.modifierLabel.isNotBlank()) {
                     sb.appendLine("  + ${line.modifierLabel}")
                 }

@@ -53,16 +53,10 @@ function validateGoogleFormTemplate(enabled, template) {
   try {
     url = new URL(template);
   } catch {
-    return 'Enter a valid Google Forms prefilled URL.';
+    return 'Enter a valid promotion QR destination URL.';
   }
-  if (url.protocol !== 'https:' || url.hostname !== 'docs.google.com' || !url.pathname.includes('/forms/')) {
-    return 'Use an HTTPS prefilled URL from Google Forms.';
-  }
-  const claimEntries = [...new Set(
-    [...url.searchParams.keys()].filter(key => /^entry\.\d+$/.test(key))
-  )];
-  if (claimEntries.length !== 1) {
-    return 'Prefill only the Claim Code question, then paste the generated Google Forms link here.';
+  if (url.protocol !== 'https:' || !url.hostname) {
+    return 'Use a complete HTTPS URL for the promotion QR.';
   }
   return null;
 }
@@ -109,9 +103,11 @@ function buildPromotionQrUrl(template, claimCode) {
   }
   try {
     const url = new URL(source);
-    const claimEntry = [...url.searchParams.keys()].find(key => /^entry\.\d+$/.test(key));
-    if (!claimEntry) return source;
-    url.searchParams.set(claimEntry, claimCode);
+    const claimEntries = [...new Set(
+      [...url.searchParams.keys()].filter(key => /^entry\.\d+$/.test(key))
+    )];
+    if (claimEntries.length !== 1) return source;
+    url.searchParams.set(claimEntries[0], claimCode);
     return url.toString();
   } catch {
     return source;

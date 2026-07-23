@@ -38,6 +38,7 @@ import com.kape.coffeepos.printer.PRINTER_INTERFACE_BLUETOOTH
 import com.kape.coffeepos.printer.PRINTER_INTERFACE_WINDOWS_BRIDGE
 import com.kape.coffeepos.printer.PrinterDevice
 import com.kape.coffeepos.printer.PrinterProfile
+import com.kape.coffeepos.printer.buildPromotionTestQrUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,6 +105,34 @@ internal fun discountSettingsValidationError(senior: String, pwd: String): Strin
     return validate("Senior", senior) ?: validate("PWD", pwd)
 }
 
+internal fun safeReenrollmentCodeError(value: String): String? {
+    val code = value.trim()
+    if (code.isBlank()) return "Enter the re-enrollment code from the admin website."
+    if (!code.matches(Regex("""[A-Za-z0-9_-]{6,32}"""))) {
+        return "Enter the complete re-enrollment code exactly as shown on the website."
+    }
+    return null
+}
+
+internal fun promotionReceiptText(result: PromotionResult): String = buildString {
+    appendLine("CONGRATULATIONS!")
+    appendLine("FREE DRINK REWARD")
+    appendLine("--------------------------------")
+    appendLine("Winning order: ${result.sequenceNumber}")
+    appendLine("Claim code: ${result.claimCode.orEmpty()}")
+    result.expiresAt?.let { expiresAt ->
+        val date = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Manila")
+        }.format(Date(expiresAt))
+        appendLine("Valid until: $date")
+    }
+    appendLine("--------------------------------")
+    appendLine("Scan the QR code and follow the link.")
+    appendLine("Present this claim code to staff.")
+    appendLine("One base drink of your choice is free.")
+    appendLine("Paid modifiers are not included.")
+}
+
 data class PosUiState(
     val catalog: MenuCatalog = MenuCatalog(),
     val employee: Employee? = null,
@@ -168,6 +197,10 @@ data class PosUiState(
     val showManagerAuthorityDialog: Boolean = false,
     val managerAuthorityPin: String = "",
     val managerAuthorityError: String? = null,
+    val showSafeReenrollmentDialog: Boolean = false,
+    val safeReenrollmentCode: String = "",
+    val safeReenrollmentBusy: Boolean = false,
+    val safeReenrollmentError: String? = null,
     val menuFormEditingItemId: String? = null,
     val menuFormName: String = "",
     val menuFormDescription: String = "",
@@ -230,13 +263,7 @@ data class PosUiState(
     val settingsFormSeniorPercent: String = "20.0",
     val settingsFormPwdPercent: String = "20.0",
     val discountSettingsError: String? = null,
-    // Payment method editor
     val paymentMethods: List<PaymentMethod> = emptyList(),
-    val showPaymentMethodEditor: Boolean = false,
-    val paymentMethodEditorId: String? = null,
-    val paymentMethodEditorName: String = "",
-    val paymentMethodEditorCategory: String? = null,
-    val paymentMethodEditorError: String? = null,
     // Employee management
     val allEmployees: List<Employee> = emptyList(),
     val showEmployeeEditor: Boolean = false,
@@ -268,7 +295,6 @@ data class PosUiState(
     val pendingRefundOrderId: String? = null,
     val voidPinInput: String = "",
     val voidPinError: String? = null,
-    val settingsFormVoidPin: String = "1234",
     val promotionConfig: PromotionConfig = PromotionConfig(available = false),
     val promotionBusy: Boolean = false,
     val promotionError: String? = null,
@@ -459,8 +485,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                             settingsFormTipPresets = settings.tipPresets,
                             settingsFormFooter = settings.receiptFooter,
                             settingsFormSeniorPercent = settings.seniorDiscountPercent.toString(),
-                            settingsFormPwdPercent = settings.pwdDiscountPercent.toString(),
-                            settingsFormVoidPin = settings.voidRefundPin
+                            settingsFormPwdPercent = settings.pwdDiscountPercent.toString()
                         )
                     }
                 }
@@ -1969,6 +1994,66 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    fun testPrinterQrCodes() {
+        viewModelScope.launch {
+            val formState = _uiState.value
+            val profile = PrinterProfile(
+                name = formState.printerFormName.trim().ifBlank { "POS-58" },
+                model = formState.printerFormModel.ifBlank { "POS-58" },
+                interfaceType = formState.printerFormInterface,
+                bluetoothAddress = formState.printerFormAddress,
+                bridgeUrl = formState.printerFormBridgeUrl.ifBlank { DEFAULT_WINDOWS_BRIDGE_PRINT_URL },
+                paperWidthMm = formState.printerFormPaperWidthMm,
+                printReceipts = formState.printerFormPrintReceipts,
+                autoPrintReceipts = formState.printerFormAutoPrintReceipts,
+                kickCashDrawer = formState.printerFormKickCashDrawer,
+                pesoSignStyle = formState.printerFormPesoSignStyle,
+                lineCharacters = formState.printerFormLineCharacters
+            )
+            if (profile.interfaceType != PRINTER_INTERFACE_BLUETOOTH) {
+                val message = "QR printer test requires the Bluetooth printer interface."
+                _uiState.update { it.copy(printerMessage = message, statusMessage = message) }
+                return@launch
+            }
+
+            container.printerManager.savePrinterProfile(profile)
+            val promotionUrl = buildPromotionTestQrUrl(
+                template = formState.promotionConfig.googleFormUrlTemplate
+            )
+            val startingMessage = if (promotionUrl == null) {
+                "Printing Facebook QR. Promotion QR is unavailable until its prefilled Google Form link is valid."
+            } else {
+                "Sending promotion and Facebook QR test..."
+            }
+            _uiState.update {
+                it.copy(
+                    printerProfile = profile,
+                    savedPrinterAddress = profile.bluetoothAddress,
+                    printerBusy = true,
+                    printerMessage = startingMessage
+                )
+            }
+            val result = container.printerManager.printQrTest(promotionUrl)
+            _uiState.update {
+                val message = when {
+                    !result.success -> result.message
+                    promotionUrl == null ->
+                        "${result.message} Facebook QR was included; promotion QR needs a valid prefilled Google Form link."
+                    else -> "${result.message} Scan both printed codes to verify them."
+                }
+                it.copy(
+                    printerBusy = false,
+                    connectedPrinter = result.device ?: container.printerManager.connectedPrinter(),
+                    savedPrinterAddress = container.printerManager.savedPrinterAddress,
+                    printerPermissionNeeded = !container.printerManager.hasBluetoothPermission(),
+                    printerScanPermissionNeeded = !container.printerManager.hasScanPermission(),
+                    printerMessage = message,
+                    statusMessage = message
+                )
+            }
+        }
+    }
+
     private fun checkout(paymentMethod: String, amountTenderedCents: Int) {
         viewModelScope.launch {
             val state = _uiState.value
@@ -2875,106 +2960,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun openNewPaymentMethodEditor() {
-        if (!requireConfigurationAuthority("payment methods")) return
-        _uiState.update {
-            it.copy(
-                showPaymentMethodEditor = true,
-                paymentMethodEditorId = null,
-                paymentMethodEditorName = "",
-                paymentMethodEditorCategory = null,
-                paymentMethodEditorError = null
-            )
-        }
-    }
-
-    fun openEditPaymentMethodEditor(method: PaymentMethod) {
-        if (method.isSystem) return
-        if (!requireConfigurationAuthority("payment methods")) return
-        _uiState.update {
-            it.copy(
-                showPaymentMethodEditor = true,
-                paymentMethodEditorId = method.id,
-                paymentMethodEditorName = method.name,
-                paymentMethodEditorCategory = method.paymentCategory,
-                paymentMethodEditorError = null
-            )
-        }
-    }
-
-    fun closePaymentMethodEditor() {
-        _uiState.update { it.copy(showPaymentMethodEditor = false) }
-    }
-
-    fun updatePaymentMethodEditorName(value: String) {
-        _uiState.update { it.copy(paymentMethodEditorName = value, paymentMethodEditorError = null) }
-    }
-
-    fun updatePaymentMethodEditorCategory(value: String) {
-        if (value !in setOf(PaymentCategories.CASH, PaymentCategories.ONLINE)) return
-        _uiState.update { it.copy(paymentMethodEditorCategory = value, paymentMethodEditorError = null) }
-    }
-
-    fun savePaymentMethodFromEditor() {
-        viewModelScope.launch {
-            if (!requireConfigurationAuthority("payment methods")) return@launch
-            val state = _uiState.value
-            val name = state.paymentMethodEditorName.trim()
-            if (name.isBlank()) {
-                _uiState.update { it.copy(paymentMethodEditorError = "Enter a payment method name.") }
-                return@launch
-            }
-            val paymentCategory = state.paymentMethodEditorCategory
-            if (paymentCategory !in setOf(PaymentCategories.CASH, PaymentCategories.ONLINE)) {
-                _uiState.update { it.copy(paymentMethodEditorError = "Select Cash or Online.") }
-                return@launch
-            }
-            
-            val id = state.paymentMethodEditorId 
-                ?: name.lowercase(java.util.Locale.US).replace(Regex("[^a-z0-9]+"), "-").trim('-')
-                    .ifBlank { "pay-${java.util.UUID.randomUUID().toString().take(8)}" }
-            
-            val existing = state.paymentMethods.firstOrNull { it.id == id }
-            val enabled = existing?.enabled ?: true
-            val isSystem = existing?.isSystem ?: false
-            
-            val method = PaymentMethod(
-                id = id,
-                name = name,
-                enabled = enabled,
-                isSystem = isSystem,
-                paymentCategory = paymentCategory
-            )
-            container.settingsRepository.savePaymentMethod(method)
-            _uiState.update {
-                it.copy(
-                    showPaymentMethodEditor = false,
-                    paymentMethodEditorError = null,
-                    statusMessage = "Payment method '$name' saved."
-                )
-            }
-        }
-    }
-
-    fun togglePaymentMethodEnabled(method: PaymentMethod) {
-        if (method.isSystem) return
-        viewModelScope.launch {
-            if (!requireConfigurationAuthority("payment methods")) return@launch
-            val updated = method.copy(enabled = !method.enabled)
-            container.settingsRepository.savePaymentMethod(updated)
-            _uiState.update { it.copy(statusMessage = "Payment method '${method.name}' ${if (updated.enabled) "enabled" else "hidden"}.") }
-        }
-    }
-
-    fun deletePaymentMethod(method: PaymentMethod) {
-        if (method.isSystem) return
-        viewModelScope.launch {
-            if (!requireConfigurationAuthority("payment methods")) return@launch
-            container.settingsRepository.deletePaymentMethod(method.id)
-            _uiState.update { it.copy(statusMessage = "Payment method '${method.name}' deleted.") }
-        }
-    }
-
     fun viewReceiptForOrder(orderId: String) {
         viewModelScope.launch {
             val receipt = container.orderRepository.receipt(orderId)
@@ -3161,29 +3146,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             voidOrder(voidId)
         } else if (refundId != null) {
             refundOrder(refundId)
-        }
-    }
-
-    fun saveVoidRefundPin(newPin: String) {
-        viewModelScope.launch {
-            val state = _uiState.value
-            if (!requireConfigurationAuthority("authorization settings")) return@launch
-            if (newPin.length != 4 || !newPin.all { it.isDigit() }) {
-                _uiState.update { it.copy(statusMessage = "PIN must be exactly 4 digits.") }
-                return@launch
-            }
-            val updated = state.settings.copy(voidRefundPin = newPin)
-            val saveResult = container.supabaseSyncManager.runManagerConfigurationMutation {
-                container.settingsRepository.saveSettings(updated)
-            }
-            if (saveResult.isFailure) {
-                _uiState.update {
-                    it.copy(statusMessage = saveResult.exceptionOrNull()?.localizedMessage
-                        ?: "Only the designated Manager Tablet can edit authorization settings.")
-                }
-                return@launch
-            }
-            _uiState.update { it.copy(settings = updated, settingsFormVoidPin = newPin, statusMessage = "Authorization PIN updated.") }
         }
     }
 
@@ -4050,26 +4012,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun promotionReceiptText(result: PromotionResult): String = buildString {
-        appendLine("CONGRATULATIONS!")
-        appendLine("FREE DRINK REWARD")
-        appendLine("--------------------------------")
-        appendLine("Winning order: ${result.sequenceNumber}")
-        appendLine("Reward interval: Every ${result.ordersPerReward} orders")
-        appendLine("Claim code: ${result.claimCode.orEmpty()}")
-        result.expiresAt?.let { expiresAt ->
-            val date = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("Asia/Manila")
-            }.format(Date(expiresAt))
-            appendLine("Valid until: $date")
-        }
-        appendLine("--------------------------------")
-        appendLine("Scan the QR code and submit the form.")
-        appendLine("Present this claim code to staff.")
-        appendLine("One base drink of your choice is free.")
-        appendLine("Paid modifiers are not included.")
-    }
-
     private suspend fun prepareReceiptForPrinting(
         orderId: String,
         receiptText: String?,
@@ -4190,6 +4132,71 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 container.supabaseSyncManager.enroll(url, enrollmentCode, deviceName)
             }
             _uiState.update { state -> state.copy(statusMessage = result.exceptionOrNull()?.message ?: "Render Cloud synchronized.") }
+        }
+    }
+
+    fun showSafeReenrollmentDialog(show: Boolean) {
+        if (_uiState.value.safeReenrollmentBusy) return
+        _uiState.update {
+            it.copy(
+                showSafeReenrollmentDialog = show,
+                safeReenrollmentCode = "",
+                safeReenrollmentError = null
+            )
+        }
+    }
+
+    fun updateSafeReenrollmentCode(value: String) {
+        val clean = value.uppercase(Locale.US)
+            .filter { it.isLetterOrDigit() || it == '-' || it == '_' }
+            .take(32)
+        _uiState.update {
+            it.copy(
+                safeReenrollmentCode = clean,
+                safeReenrollmentError = null
+            )
+        }
+    }
+
+    fun confirmSafeReenrollment() {
+        val code = _uiState.value.safeReenrollmentCode
+        val validationError = safeReenrollmentCodeError(code)
+        if (validationError != null) {
+            _uiState.update { it.copy(safeReenrollmentError = validationError) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    safeReenrollmentBusy = true,
+                    safeReenrollmentError = null,
+                    statusMessage = "Re-enrolling this tablet..."
+                )
+            }
+            val result = container.supabaseSyncManager.enroll(
+                renderUrl = container.supabaseSyncManager.renderCloudUrl,
+                enrollmentCode = code,
+                requestedName = container.supabaseSyncManager.deviceName
+            )
+            _uiState.update {
+                if (result.isSuccess) {
+                    it.copy(
+                        showSafeReenrollmentDialog = false,
+                        safeReenrollmentCode = "",
+                        safeReenrollmentBusy = false,
+                        safeReenrollmentError = null,
+                        statusMessage = "Device re-enrolled and synchronized. Local POS data was preserved."
+                    )
+                } else {
+                    it.copy(
+                        safeReenrollmentBusy = false,
+                        safeReenrollmentError = result.exceptionOrNull()?.message
+                            ?: "Re-enrollment failed. Check the code and try again.",
+                        statusMessage = "Re-enrollment failed. Local POS data was not changed."
+                    )
+                }
+            }
         }
     }
 

@@ -98,11 +98,23 @@ const api = {
   updateCustomDiscount: (id, discount) => apiFetch(`/admin/discount-settings/custom/${encodeURIComponent(id)}`, {
     method: 'PUT', body: JSON.stringify(discount)
   }),
+  getPaymentVoidSettings: () => apiFetch('/admin/payment-void-settings'),
+  updateVoidRefundPin: (settings) => apiFetch('/admin/payment-void-settings/pin', {
+    method: 'PUT', body: JSON.stringify(settings)
+  }),
+  createPaymentMethod: (method) => apiFetch('/admin/payment-void-settings/methods', {
+    method: 'POST', body: JSON.stringify(method)
+  }),
+  updatePaymentMethod: (id, method) => apiFetch(`/admin/payment-void-settings/methods/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(method)
+  }),
+  deletePaymentMethod: (id, expectedUpdatedAt) => apiFetch(`/admin/payment-void-settings/methods/${encodeURIComponent(id)}`, {
+    method: 'DELETE', body: JSON.stringify({ expectedUpdatedAt })
+  }),
 
   // Table endpoints
   getMenuCategories: () => apiFetch('/admin/data/menu_category?select=*'),
   getMenuItems: () => apiFetch('/admin/data/menu_item?select=*'),
-  getPaymentMethods: () => apiFetch('/admin/data/payment_method?select=*'),
   getStoreSettings: () => apiFetch('/admin/data/store_settings?select=*'),
   getIngredients: () => apiFetch('/admin/data/ingredient?select=*'),
 

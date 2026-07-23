@@ -196,60 +196,6 @@ fun CoffeePosApp(viewModel: PosViewModel) {
                 EmployeeEditorDialog(state, viewModel)
                 AddOnDialog(state, viewModel)
 
-                if (state.showPaymentMethodEditor) {
-                    AlertDialog(
-                        onDismissRequest = viewModel::closePaymentMethodEditor,
-                        title = {
-                            Text(
-                                text = if (state.paymentMethodEditorId == null) "Add Payment Method" else "Edit Payment Method",
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = state.paymentMethodEditorName,
-                                    onValueChange = viewModel::updatePaymentMethodEditorName,
-                                    label = { Text("Payment Method Name") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text("Payment Category", fontWeight = FontWeight.Medium)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    listOf(
-                                        PaymentCategories.CASH to "Cash",
-                                        PaymentCategories.ONLINE to "Online"
-                                    ).forEach { (category, label) ->
-                                        val selected = state.paymentMethodEditorCategory == category
-                                        Button(
-                                            onClick = { viewModel.updatePaymentMethodEditorCategory(category) },
-                                            modifier = Modifier.weight(1f).height(48.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                                contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        ) {
-                                            Text(label)
-                                        }
-                                    }
-                                }
-                                state.paymentMethodEditorError?.let { error ->
-                                    Text(error, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            Button(onClick = viewModel::savePaymentMethodFromEditor) { Text("Save") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = viewModel::closePaymentMethodEditor) { Text("Cancel") }
-                        }
-                    )
-                }
-
                 if (showLowStockRestockDialog) {
                     LowStockRestockDialog(state, viewModel, onDismiss = { showLowStockRestockDialog = false })
                 }
@@ -1607,10 +1553,11 @@ private fun ReceiptDialog(state: PosUiState, viewModel: PosViewModel) {
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "THIS IS NOT AN OFFICIAL RECEIPT!",
+                        text = "$RECEIPT_THANK_YOU_LINE\n$RECEIPT_DISCLAIMER_LINE",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Color.Red,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
@@ -3492,6 +3439,20 @@ private fun DevicesScreen(state: PosUiState, viewModel: PosViewModel) {
                         Text("DELETE PRINTER", color = MaterialTheme.colorScheme.error)
                     }
                 }
+                OutlinedButton(
+                    onClick = viewModel::testPrinterQrCodes,
+                    enabled = !state.printerBusy &&
+                        !state.printerScanning &&
+                        state.printerFormInterface == PRINTER_INTERFACE_BLUETOOTH,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (state.printerBusy) "PRINTING..." else "PRINT QR TEST")
+                }
+                Text(
+                    "Prints a safe test for the Facebook and promotion QR codes. It does not create an order, issue a reward, count toward the promotion, or open the cash drawer.",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
 
@@ -3642,136 +3603,6 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
             }
         }
 
-        // Manager-only: Void/Refund Authorization PIN card
-        if (state.isManager) {
-            var pinInput by remember(state.settingsFormVoidPin) { mutableStateOf(state.settingsFormVoidPin) }
-            var showVoidRefundPin by remember { mutableStateOf(false) }
-            Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Void / Refund Authorization PIN", fontWeight = FontWeight.Bold)
-                    Text(
-                        text = "Cashiers must enter this 4-digit PIN to void or refund an order. Managers can change it here.",
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = pinInput,
-                            onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pinInput = it },
-                            label = { Text("4-Digit PIN") },
-                            visualTransformation = if (showVoidRefundPin) {
-                                androidx.compose.ui.text.input.VisualTransformation.None
-                            } else {
-                                androidx.compose.ui.text.input.PasswordVisualTransformation()
-                            },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
-                            singleLine = true,
-                            trailingIcon = {
-                                TextButton(onClick = { showVoidRefundPin = !showVoidRefundPin }) {
-                                    Text(if (showVoidRefundPin) "Hide" else "Show")
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(
-                            onClick = { viewModel.saveVoidRefundPin(pinInput) },
-                            enabled = pinInput.length == 4,
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Save PIN")
-                        }
-                    }
-                }
-            }
-        }
-
-        Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Payment Methods", fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = viewModel::openNewPaymentMethodEditor,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("+ Add")
-                    }
-                }
-                
-                Text(
-                    text = "Configure accepted payment methods. System methods cannot be edited, hidden, or deleted.",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-                
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.paymentMethods.forEach { method ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(if (method.id == "gcash") "GCash" else method.name, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    text = when {
-                                        !method.enabled -> "Hidden"
-                                        method.isSystem -> "Active"
-                                        method.paymentCategory == PaymentCategories.CASH -> "Active • Cash"
-                                        method.paymentCategory == PaymentCategories.ONLINE -> "Active • Online"
-                                        else -> "Needs category"
-                                    },
-                                    fontSize = 11.sp,
-                                    color = if (method.enabled && (method.isSystem || method.paymentCategory != null)) Color(0xFF2F6B5F) else Color.Gray
-                                )
-                            }
-                            
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                // Toggle Hide/Show
-                                OutlinedButton(
-                                    onClick = { viewModel.togglePaymentMethodEnabled(method) },
-                                    enabled = !method.isSystem,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text(if (method.enabled) "Hide" else "Show", fontSize = 11.sp)
-                                }
-                                // Rename
-                                OutlinedButton(
-                                    onClick = { viewModel.openEditPaymentMethodEditor(method) },
-                                    enabled = !method.isSystem,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                    modifier = Modifier.height(32.dp)
-                                ) {
-                                    Text("Edit", fontSize = 11.sp)
-                                }
-                                // Delete
-                                OutlinedButton(
-                                    onClick = { viewModel.deletePaymentMethod(method) },
-                                    enabled = !method.isSystem,
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                    modifier = Modifier.height(32.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = if (method.isSystem) Color.LightGray else MaterialTheme.colorScheme.error
-                                    ),
-                                    border = BorderStroke(1.dp, if (method.isSystem) Color.LightGray else MaterialTheme.colorScheme.error)
-                                ) {
-                                    Text("Delete", fontSize = 11.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         Card(shape = RoundedCornerShape(8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Default Employee PINs", fontWeight = FontWeight.Bold)
@@ -3903,6 +3734,20 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                         Text(if (syncManager.managerDeviceId.isBlank()) "Designate as Manager Tablet" else "Transfer Manager Authority Here")
                     }
                 }
+                if (syncManager.isEnrolled) {
+                    OutlinedButton(
+                        onClick = { viewModel.showSafeReenrollmentDialog(true) },
+                        enabled = !state.safeReenrollmentBusy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    ) {
+                        Text("Safe Re-enroll Device")
+                    }
+                    Text(
+                        "Use this only after choosing Re-enroll for this device on the admin website. Orders, inventory, settings, and the tablet device ID are preserved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -3947,6 +3792,62 @@ private fun SettingsScreen(state: PosUiState, viewModel: PosViewModel) {
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.showManagerAuthorityDialog(false) }) { Text("Cancel") }
+                }
+            )
+        }
+        if (state.showSafeReenrollmentDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!state.safeReenrollmentBusy) viewModel.showSafeReenrollmentDialog(false)
+                },
+                title = { Text("Safe Re-enroll Device") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "First open Cloud Devices on the admin website, choose Re-enroll for this tablet, then enter the new code below."
+                        )
+                        Text(
+                            "The existing POS database and device ID will not be cleared. The cloud token changes only after Render accepts the code.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedTextField(
+                            value = state.safeReenrollmentCode,
+                            onValueChange = viewModel::updateSafeReenrollmentCode,
+                            label = { Text("Re-enrollment code") },
+                            supportingText = state.safeReenrollmentError?.let { error -> { Text(error) } },
+                            isError = state.safeReenrollmentError != null,
+                            enabled = !state.safeReenrollmentBusy,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (state.safeReenrollmentBusy) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Text("Re-enrolling and synchronizing...")
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = viewModel::confirmSafeReenrollment,
+                        enabled = !state.safeReenrollmentBusy,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        Text(if (state.safeReenrollmentBusy) "Re-enrolling..." else "Re-enroll Safely")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { viewModel.showSafeReenrollmentDialog(false) },
+                        enabled = !state.safeReenrollmentBusy,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        Text("Cancel")
+                    }
                 }
             )
         }

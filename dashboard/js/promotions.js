@@ -30,23 +30,24 @@ function validateGoogleFormTemplate(enabled, template) {
   try {
     url = new URL(template);
   } catch {
-    return 'Enter a valid Google Forms prefilled URL.';
+    return 'Enter a valid promotion QR destination URL.';
   }
-  if (url.protocol !== 'https:' || url.hostname !== 'docs.google.com' || !url.pathname.includes('/forms/')) {
-    return 'Use an HTTPS prefilled URL from Google Forms.';
+  if (url.protocol !== 'https:' || !url.hostname) {
+    return 'Use a complete HTTPS URL for the promotion QR.';
   }
-  const claimEntries = [...new Set(
-    [...url.searchParams.keys()].filter(key => /^entry\.\d+$/.test(key))
-  )];
-  return claimEntries.length === 1
-    ? ''
-    : 'Prefill only the Claim Code question, then paste the generated link here.';
+  return '';
 }
 
 function buildClaimUrl(template, claimCode) {
+  if (template.includes('{CLAIM_CODE}')) {
+    return template.replaceAll('{CLAIM_CODE}', encodeURIComponent(claimCode));
+  }
   const url = new URL(template);
-  const claimEntry = [...url.searchParams.keys()].find(key => /^entry\.\d+$/.test(key));
-  url.searchParams.set(claimEntry, claimCode);
+  const claimEntries = [...new Set(
+    [...url.searchParams.keys()].filter(key => /^entry\.\d+$/.test(key))
+  )];
+  if (claimEntries.length !== 1) return template;
+  url.searchParams.set(claimEntries[0], claimCode);
   return url.toString();
 }
 

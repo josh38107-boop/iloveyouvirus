@@ -91,12 +91,25 @@ internal fun remoteInt(value: Any?, field: String): Int = remoteLong(value, fiel
 internal fun remoteIntOrNull(value: Any?, field: String): Int? =
     remoteLongOrNull(value, field)?.toInt()
 
-internal fun remoteDoubleOrNull(value: Any?, field: String): Double? = when (value) {
-    null -> null
-    is Number -> value.toDouble()
-    is String -> value.toDoubleOrNull()
-    else -> null
-} ?: throw IllegalArgumentException("Render returned a non-numeric value for '$field': $value")
+internal fun remoteDoubleOrNull(value: Any?, field: String): Double? {
+    if (value == null) return null
+    return when (value) {
+        is Number -> value.toDouble()
+        is String -> value.toDoubleOrNull()
+        else -> null
+    } ?: throw IllegalArgumentException("Render returned a non-numeric value for '$field': $value")
+}
+
+internal fun versionedMutationId(deviceId: String, entity: String, canonicalRow: String): String {
+    require(deviceId.isNotBlank()) { "Device ID is required for synchronized mutations." }
+    require(entity.isNotBlank()) { "Entity is required for synchronized mutations." }
+    return MessageDigest.getInstance("SHA-256")
+        .digest("$deviceId:$entity:$canonicalRow".toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+}
+
+internal fun inventoryEventMutationId(eventId: Any?, generatedId: String): Any =
+    eventId ?: generatedId
 
 internal fun orderInventoryAddOnPayload(row: OrderInventoryAddOn): Map<String, Any> =
     mutableMapOf<String, Any>(
@@ -192,7 +205,9 @@ internal fun resolveRemoteStoreSettings(
     local.copy(
         seniorDiscountPercent = remote.seniorDiscountPercent,
         pwdDiscountPercent = remote.pwdDiscountPercent,
-        discountSettingsUpdatedAt = remote.discountSettingsUpdatedAt
+        discountSettingsUpdatedAt = remote.discountSettingsUpdatedAt,
+        voidRefundPin = remote.voidRefundPin,
+        paymentVoidSettingsUpdatedAt = remote.paymentVoidSettingsUpdatedAt
     )
 } else remote
 
@@ -586,7 +601,10 @@ class SupabaseSyncManager(
     private fun rpcRequest(function: String, payload: Map<String, Any?> = emptyMap()): String =
         if (isEnrolled && function == "apply_inventory_event") {
             pushOperations(listOf(mapOf(
-                "mutationId" to (payload["p_event_id"] ?: UUID.randomUUID().toString()),
+                "mutationId" to inventoryEventMutationId(
+                    eventId = payload["p_event_id"],
+                    generatedId = UUID.randomUUID().toString()
+                ),
                 "type" to "inventory_event",
                 "data" to payload
             )))
@@ -601,9 +619,7 @@ class SupabaseSyncManager(
         rows.chunked(100).forEach { chunk ->
             val operations = chunk.map { row ->
                 val canonical = gson.toJson(row)
-                val mutationId = MessageDigest.getInstance("SHA-256")
-                    .digest("$entity:$canonical".toByteArray())
-                    .joinToString("") { "%02x".format(it) }
+                val mutationId = versionedMutationId(deviceId, entity, canonical)
                 if (entity == "sync_tombstone") mapOf("mutationId" to mutationId, "type" to "tombstone", "data" to row)
                 else mapOf("mutationId" to mutationId, "type" to "upsert", "entity" to entity, "data" to row)
             }
@@ -1087,12 +1103,6 @@ class SupabaseSyncManager(
             makeRequest("modifier_recipe_ingredient?on_conflict=option_id,ingredient_id", "POST", gson.toJson(modifierRecipes))
         }
 
-        val paymentMethods = db.settingsDao().paymentMethodsNow()
-            .filterNot { isTombstoned(tombstones, SyncEntityType.PAYMENT_METHOD, it.id) }
-        if (paymentMethods.isNotEmpty()) {
-            makeRequest("payment_method?on_conflict=id", "POST", gson.toJson(paymentMethods))
-        }
-
         val employees = db.employeeDao().employeesNow()
         if (employees.isNotEmpty()) {
             makeRequest("employee?on_conflict=id", "POST", gson.toJson(employees))
@@ -1103,16 +1113,7 @@ class SupabaseSyncManager(
             syncPrefs.getString(storeSettingsFingerprintKey(it.id), null)
         }
         if (settings != null && storeSettingsFingerprint(settings) != lastSyncedSettings) {
-            try {
-                makeRequest("store_settings?on_conflict=id", "POST", gson.toJson(storeSettingsPayload(settings, includeVoidRefundPin = true)))
-            } catch (e: Exception) {
-                if (e.message?.contains("void_refund_pin") == true && e.message?.contains("PGRST204") == true) {
-                    Log.w(TAG, "Remote store_settings is missing void_refund_pin; retrying settings sync without PIN column.")
-                    makeRequest("store_settings?on_conflict=id", "POST", gson.toJson(storeSettingsPayload(settings, includeVoidRefundPin = false)))
-                } else {
-                    throw e
-                }
-            }
+            makeRequest("store_settings?on_conflict=id", "POST", gson.toJson(storeSettingsPayload(settings)))
         }
         }
 
@@ -1261,7 +1262,7 @@ class SupabaseSyncManager(
         }
     }
 
-    private fun storeSettingsPayload(settings: StoreSettings, includeVoidRefundPin: Boolean): List<Map<String, Any>> {
+    private fun storeSettingsPayload(settings: StoreSettings): List<Map<String, Any>> {
         val row = mutableMapOf<String, Any>(
             "id" to settings.id,
             "store_name" to settings.storeName,
@@ -1269,9 +1270,6 @@ class SupabaseSyncManager(
             "tip_presets" to settings.tipPresets,
             "receipt_footer" to settings.receiptFooter
         )
-        if (includeVoidRefundPin) {
-            row["void_refund_pin"] = settings.voidRefundPin
-        }
         return listOf(row)
     }
 
@@ -1296,6 +1294,10 @@ class SupabaseSyncManager(
                 ?: localSettings?.discountSettingsUpdatedAt
                 ?: 0,
             voidRefundPin = stringValue("void_refund_pin", localSettings?.voidRefundPin ?: "1234")
+                .ifBlank { localSettings?.voidRefundPin?.takeIf { it.isNotBlank() } ?: "1234" },
+            paymentVoidSettingsUpdatedAt = (row["payment_void_settings_updated_at"] as? Number)?.toLong()
+                ?: localSettings?.paymentVoidSettingsUpdatedAt
+                ?: 0
         )
     }
 

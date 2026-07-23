@@ -211,7 +211,8 @@ data class StoreSettings(
     val seniorDiscountPercent: Double = 20.0,
     val pwdDiscountPercent: Double = 20.0,
     val discountSettingsUpdatedAt: Long = 0,
-    val voidRefundPin: String = "1234"
+    val voidRefundPin: String = "1234",
+    val paymentVoidSettingsUpdatedAt: Long = 0
 )
 
 @Entity(primaryKeys = ["shiftId", "ingredientId"])
@@ -227,7 +228,9 @@ data class PaymentMethod(
     val name: String,
     val enabled: Boolean = true,
     val isSystem: Boolean = false,
-    val paymentCategory: String? = null
+    val paymentCategory: String? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0
 )
 
 @Entity

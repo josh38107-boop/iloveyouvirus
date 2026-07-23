@@ -30,18 +30,21 @@ test('dashboard promotion script parses and exposes accessible management contro
     script.indexOf('function validateGoogleFormTemplate'),
     script.indexOf('function updateEnabledLabel')
   );
-  const validateTemplate = new Function(`${validatorSource}; return validateGoogleFormTemplate;`)();
+  const { validateTemplate, buildClaimUrl } = new Function(
+    `${validatorSource}; return { validateTemplate: validateGoogleFormTemplate, buildClaimUrl };`
+  )();
   assert.equal(
     validateTemplate(true, 'https://docs.google.com/forms/d/e/example/viewform?entry.123=SAMPLE'),
     ''
   );
-  assert.match(
-    validateTemplate(true, 'https://docs.google.com/forms/d/e/example/viewform?usp=publish-editor{CLAIM_CODE}'),
-    /Prefill only/
-  );
+  const businessLink = 'https://www.google.com/search?q=Kanlungan+Coffee+Garage&kgmid=/g/11z8kznjv_';
+  assert.equal(validateTemplate(true, businessLink), '');
+  assert.equal(buildClaimUrl(businessLink, 'SAMPLE-FREE-DRINK'), businessLink);
+  assert.match(validateTemplate(true, 'http://example.com/promotion'), /HTTPS/);
   assert.match(html, /for="promotionEnabled"/);
   assert.match(html, /for="ordersPerReward"/);
   assert.match(html, /for="googleFormUrl"/);
+  assert.match(html, /Promotion QR destination URL/);
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(html, /<dialog[\s\S]*Confirm promotion change/);
   assert.match(html, /class="claims-table-wrap"/);
@@ -54,6 +57,22 @@ test('dashboard promotion script parses and exposes accessible management contro
   assert.doesNotMatch(html, /replace the claim field value with <strong>\{CLAIM_CODE\}/);
   assert.match(script, /Current cycle progress .* will reset to zero/);
   assert.match(script, /Existing issued claims will remain redeemable/);
+});
+
+test('receipt print paths use the exact uppercase legal footer', () => {
+  const bluetooth = fs.readFileSync(
+    path.join(projectRoot, 'app', 'src', 'main', 'java', 'com', 'kape', 'coffeepos', 'printer', 'BluetoothPrinterManager.kt'),
+    'utf8'
+  );
+  const javaBridge = fs.readFileSync(path.join(projectRoot, 'tools', 'print-bridge', 'PrintBridge.java'), 'utf8');
+  const powershellBridge = fs.readFileSync(path.join(projectRoot, 'tools', 'print-bridge', 'PrintBridge.ps1'), 'utf8');
+  for (const source of [javaBridge, powershellBridge]) {
+    assert.match(source, /THANK YOU FOR YOUR ORDER/);
+    assert.match(source, /THIS IS NOT AN OFFICIAL RECEIPT/);
+    assert.doesNotMatch(source, /Not Official Receipt!/);
+  }
+  assert.match(bluetooth, /RECEIPT_THANK_YOU_LINE/);
+  assert.match(bluetooth, /RECEIPT_DISCLAIMER_LINE/);
 });
 
 test('Android keeps promotion operations but has no settings writer', () => {

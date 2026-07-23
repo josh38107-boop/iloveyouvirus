@@ -9,6 +9,7 @@ const { createInventoryService } = require('./inventory');
 const { createMenuService } = require('./menu');
 const { createEmployeeService } = require('./employees');
 const { createDiscountService } = require('./discounts');
+const { createPaymentVoidService } = require('./payment-void');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -21,6 +22,7 @@ const inventory = createInventoryService(db, { branchId: process.env.DEFAULT_BRA
 const menu = createMenuService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const employees = createEmployeeService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const discounts = createDiscountService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
+const paymentVoid = createPaymentVoidService(db, { branchId: process.env.DEFAULT_BRANCH_ID || 'main' });
 const promotion = rpc.createPromotionService(db);
 
 // ─── Allowed tables (whitelist for security) ─────────────────────────────────
@@ -201,6 +203,18 @@ app.all('/rest/v1/:table', authenticate, async (req, res) => {
   if (!ALLOWED_TABLES.has(table)) {
     return res.status(404).json({ error: `Table '${table}' not found` });
   }
+  if (table === 'payment_method' && req.method !== 'GET') {
+    return res.status(403).json({ error: 'Manage payment methods in the admin website.' });
+  }
+  if (table === 'store_settings' && req.method !== 'GET' && req.syncDevice) {
+    const stripWebsiteFields = row => {
+      const cleaned = { ...row };
+      delete cleaned.void_refund_pin;
+      delete cleaned.payment_void_settings_updated_at;
+      return cleaned;
+    };
+    req.body = Array.isArray(req.body) ? req.body.map(stripWebsiteFields) : stripWebsiteFields(req.body || {});
+  }
   const managerTables = new Set(['sync_device_authority', 'sync_tombstone', 'menu_category', 'menu_item', 'modifier_group',
     'modifier_option', 'menu_item_modifier_group', 'ingredient', 'recipe_ingredient', 'modifier_recipe_ingredient',
     'payment_method', 'discount_rule', 'employee', 'store_settings']);
@@ -220,6 +234,7 @@ app.all('/admin/data/:table', adminAuthenticate, async (req, res) => {
   const { table } = req.params;
   if (table === 'employee') return res.status(404).json({ error: 'Use the dedicated employee management API.' });
   if (table === 'discount_rule') return res.status(404).json({ error: 'Use the dedicated discount settings API.' });
+  if (table === 'payment_method') return res.status(404).json({ error: 'Use the dedicated Payment & Void Settings API.' });
   if (!ALLOWED_TABLES.has(table)) return res.status(404).json({ error: `Table '${table}' not found` });
   switch (req.method) {
     case 'GET': return handleGet(req, res, table);
@@ -535,6 +550,31 @@ app.post('/admin/discount-settings/custom', adminAuthenticate, async (req, res) 
 app.put('/admin/discount-settings/custom/:id', adminAuthenticate, async (req, res) => {
   try { res.json(await discounts.updateRule(req.params.id, req.body || {})); }
   catch (err) { console.error('PUT /admin/discount-settings/custom/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.get('/admin/payment-void-settings', adminAuthenticate, async (req, res) => {
+  try { res.json(await paymentVoid.getSettings()); }
+  catch (err) { console.error('GET /admin/payment-void-settings:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/payment-void-settings/pin', adminAuthenticate, async (req, res) => {
+  try { res.json(await paymentVoid.updatePin(req.body || {})); }
+  catch (err) { console.error('PUT /admin/payment-void-settings/pin:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.post('/admin/payment-void-settings/methods', adminAuthenticate, async (req, res) => {
+  try { res.status(201).json(await paymentVoid.createMethod(req.body || {})); }
+  catch (err) { console.error('POST /admin/payment-void-settings/methods:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.put('/admin/payment-void-settings/methods/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await paymentVoid.updateMethod(req.params.id, req.body || {})); }
+  catch (err) { console.error('PUT /admin/payment-void-settings/methods/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
+});
+
+app.delete('/admin/payment-void-settings/methods/:id', adminAuthenticate, async (req, res) => {
+  try { res.json(await paymentVoid.deleteMethod(req.params.id, req.body || {})); }
+  catch (err) { console.error('DELETE /admin/payment-void-settings/methods/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
 });
 
 app.put('/admin/promotion', adminAuthenticate, async (req, res) => {

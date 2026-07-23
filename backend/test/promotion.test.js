@@ -16,6 +16,8 @@ test('promotion QR template safely encodes the unique claim code', () => {
     ),
     'https://docs.google.com/forms/d/e/example/viewform?usp=pp_url&entry.123=FREE+A%2F1'
   );
+  const businessLink = 'https://www.google.com/search?q=Kanlungan+Coffee+Garage&kgmid=/g/11z8kznjv_';
+  assert.equal(_test.buildPromotionQrUrl(businessLink, 'FREE A/1'), businessLink);
 });
 
 test('promotion responses match the Android app snake-case contract', () => {
@@ -42,20 +44,15 @@ test('promotion responses match the Android app snake-case contract', () => {
   });
 });
 
-test('enabled promotions require a Google Forms prefilled entry for the claim code', () => {
+test('enabled promotions accept complete HTTPS destinations', () => {
   const valid = 'https://docs.google.com/forms/d/e/example/viewform?usp=pp_url&entry.123=SAMPLE';
-  const malformed = 'https://docs.google.com/forms/d/e/example/viewform?usp=publish-editor{CLAIM_CODE}';
+  const businessLink = 'https://www.google.com/search?q=Kanlungan+Coffee+Garage&kgmid=/g/11z8kznjv_';
 
   assert.equal(_test.validateGoogleFormTemplate(true, valid), null);
-  assert.match(_test.validateGoogleFormTemplate(true, malformed), /Prefill only/);
-  assert.match(_test.validateGoogleFormTemplate(true, 'http://docs.google.com/forms/x?entry.1=SAMPLE'), /HTTPS/);
-  assert.match(
-    _test.validateGoogleFormTemplate(
-      true,
-      'https://docs.google.com/forms/d/e/example/viewform?entry.1=ONE&entry.2=TWO'
-    ),
-    /Prefill only/
-  );
+  assert.equal(_test.validateGoogleFormTemplate(true, businessLink), null);
+  assert.match(_test.validateGoogleFormTemplate(true, ''), /valid promotion QR/);
+  assert.match(_test.validateGoogleFormTemplate(true, 'http://example.com/promotion'), /HTTPS/);
+  assert.match(_test.validateGoogleFormTemplate(true, 'not a link'), /valid promotion QR/);
   assert.equal(_test.validateGoogleFormTemplate(false, ''), null);
 });
 

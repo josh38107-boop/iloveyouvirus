@@ -18,6 +18,8 @@ class RemoteNumberParsingTest {
     fun preservesNullForOptionalNumbers() {
         assertNull(remoteLongOrNull(null, "closed_at"))
         assertNull(remoteIntOrNull(null, "ending_cash_cents"))
+        assertNull(remoteDoubleOrNull(null, "pos_order.discount_percent"))
+        assertEquals(20.0, remoteDoubleOrNull("20.0", "pos_order.discount_percent")!!, 0.0)
     }
 
     @Test
@@ -26,5 +28,10 @@ class RemoteNumberParsingTest {
             remoteLong("not-a-number", "shift.id")
         }
         assertTrue(error.message.orEmpty().contains("shift.id"))
+
+        val discountError = assertThrows(IllegalArgumentException::class.java) {
+            remoteDoubleOrNull("not-a-number", "pos_order.discount_percent")
+        }
+        assertTrue(discountError.message.orEmpty().contains("pos_order.discount_percent"))
     }
 }

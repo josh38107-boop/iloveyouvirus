@@ -110,6 +110,7 @@ body {
 }
 .nav-item.active .nav-icon { filter: none; }
 .nav-icon { width: 20px; text-align: center; font-size: 16px; }
+.nav-icon svg { width: 20px; height: 20px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .sidebar-footer {
   padding: 16px 20px;
