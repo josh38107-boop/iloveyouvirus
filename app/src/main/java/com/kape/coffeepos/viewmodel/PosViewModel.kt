@@ -54,8 +54,10 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
 
-enum class AppScreen { POS, ORDERS, INVENTORY, REPORTS, DEVICES, SETTINGS, MENU, MANAGER, DRAWER }
+enum class AppScreen { POS, ORDERS, INVENTORY, REPORTS, DEVICES, SETTINGS, MENU, MANAGER, DRAWER, HISTORY }
+enum class HistoryDateFilter { TODAY, YESTERDAY, ALL }
 enum class ReceiptPromotionState { NONE, CHECKING, READY, RETRY_REQUIRED }
+
 enum class ReceiptCopyStage { FIRST_COPY, SECOND_COPY }
 internal const val RECEIPT_PREPARING_LABEL = "Preparing receipt..."
 internal const val RECEIPT_PREPARATION_ERROR =
@@ -161,6 +163,9 @@ data class PosUiState(
     val reportCustomEnd: Long? = null,
     val reportRangeError: String? = null,
     val selectedReportCashierId: String? = null,
+    val historyDateFilter: HistoryDateFilter = HistoryDateFilter.TODAY,
+    val happenings: List<com.kape.coffeepos.data.Happening> = emptyList(),
+    val historyLoading: Boolean = false,
     val loginError: String? = null,
     val statusMessage: String? = null,
     val pendingItem: MenuItem? = null,
@@ -596,7 +601,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
 
     fun selectScreen(screen: AppScreen) {
         val state = _uiState.value
-        if ((screen == AppScreen.SETTINGS || screen == AppScreen.MENU || screen == AppScreen.MANAGER || screen == AppScreen.REPORTS || screen == AppScreen.INVENTORY || screen == AppScreen.DEVICES) && !state.isManager) {
+        if ((screen == AppScreen.SETTINGS || screen == AppScreen.MENU || screen == AppScreen.MANAGER || screen == AppScreen.REPORTS || screen == AppScreen.INVENTORY || screen == AppScreen.DEVICES || screen == AppScreen.HISTORY) && !state.isManager) {
             _uiState.update { it.copy(statusMessage = "Manager PIN required for ${screen.name.lowercase()} access.") }
             return
         }
@@ -613,6 +618,9 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 orderTypeError = null,
                 paymentError = null
             )
+        }
+        if (screen == AppScreen.HISTORY) {
+            loadHappenings()
         }
         if (screen == AppScreen.SETTINGS || screen == AppScreen.POS) {
             refreshPromotionConfig()
@@ -4244,6 +4252,42 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     it.copy(managerAuthorityError = result.exceptionOrNull()?.localizedMessage ?: "Authority transfer failed.")
                 }
             }
+        }
+    }
+
+    fun loadHappenings(filter: HistoryDateFilter? = null) {
+        val targetFilter = filter ?: _uiState.value.historyDateFilter
+        _uiState.update { it.copy(historyDateFilter = targetFilter, historyLoading = true) }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val (startTime, endTime) = when (targetFilter) {
+                HistoryDateFilter.TODAY -> {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    cal.set(java.util.Calendar.MINUTE, 0)
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
+                    val start = cal.timeInMillis
+                    cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                    val end = cal.timeInMillis - 1
+                    Pair(start, end)
+                }
+                HistoryDateFilter.YESTERDAY -> {
+                    val cal = java.util.Calendar.getInstance()
+                    cal.add(java.util.Calendar.DAY_OF_MONTH, -1)
+                    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    cal.set(java.util.Calendar.MINUTE, 0)
+                    cal.set(java.util.Calendar.SECOND, 0)
+                    cal.set(java.util.Calendar.MILLISECOND, 0)
+                    val start = cal.timeInMillis
+                    cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+                    val end = cal.timeInMillis - 1
+                    Pair(start, end)
+                }
+                HistoryDateFilter.ALL -> Pair(0L, now + 86400000L)
+            }
+            val happenings = container.auditLogRepository.getHappeningsForRange(startTime, endTime)
+            _uiState.update { it.copy(happenings = happenings, historyLoading = false) }
         }
     }
 }

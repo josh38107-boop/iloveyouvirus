@@ -11,6 +11,8 @@ const { createEmployeeService } = require('./employees');
 const { createDiscountService } = require('./discounts');
 const { createPaymentVoidService } = require('./payment-void');
 const { createDataMaintenanceService } = require('./data-maintenance');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -34,8 +36,9 @@ const ALLOWED_TABLES = new Set([
   'menu_item_modifier_group', 'ingredient', 'recipe_ingredient',
   'modifier_recipe_ingredient', 'payment_method', 'discount_rule', 'employee',
   'store_settings', 'shift', 'pos_order', 'order_line', 'payment',
-  'receipt', 'stock_snapshot', 'inventory_balance', 'order_inventory_add_on'
+  'receipt', 'stock_snapshot', 'inventory_balance', 'order_inventory_add_on', 'audit_log'
 ]);
+
 const RESET_GUARDED_TABLES = new Set([
   'shift', 'pos_order', 'order_line', 'payment', 'receipt',
   'stock_snapshot', 'order_inventory_add_on', 'inventory_balance'
@@ -47,8 +50,100 @@ const RESET_GUARDED_RPCS = new Set([
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.set('trust proxy', 1);
+
+// ── 1. Security Headers (Helmet) ─────────────────────────────────────────────
+// Sets 15+ HTTP headers that block XSS, clickjacking, MIME sniffing, etc.
+app.use(helmet({
+  contentSecurityPolicy: false, // dashboard uses inline scripts; loosen only this
+  crossOriginEmbedderPolicy: false,
+}));
+
+// ── 2. Global DDoS / Flood Rate Limiter ──────────────────────────────────────
+// Max 200 requests per minute per IP across all routes
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' },
+  skip: (req) => req.path === '/health' || req.path === '/ready',
+});
+app.use(globalLimiter);
+
+// ── 3. Auth Route Brute-Force Limiter ────────────────────────────────────────
+// Max 10 login attempts per 15 minutes per IP — blocks password guessing
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+});
+app.use('/rest/v1/auth', authLimiter);
+app.use('/admin/login', authLimiter);
+app.use('/admin/auth', authLimiter);
+
+// ── 4. Sync / Write Route Limiter ────────────────────────────────────────────
+// Devices can push 120 sync mutations per minute — prevents data flooding
+const syncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Sync rate limit exceeded.' },
+});
+app.use('/rest/v1/sync', syncLimiter);
+app.use('/rest/v1/rpc', syncLimiter);
+
+// ── 5. Admin Route Limiter ────────────────────────────────────────────────────
+// Extra strict for admin endpoints — max 60 per minute
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Admin rate limit exceeded.' },
+});
+app.use('/admin', adminLimiter);
+
+// ── 6. Block Suspicious Request Patterns ─────────────────────────────────────
+// Catches common attack probe patterns (SQL injection, path traversal, script injection)
+const SUSPICIOUS_PATTERNS = [
+  /(\'|\")(\s)*(or|and)(\s)+/i,       // SQL injection: ' OR 1=1
+  /union(\s)+select/i,                  // SQL UNION attack
+  /\.\.\/|\.\.\\/,                     // Path traversal: ../
+  /<script[^>]*>/i,                     // XSS script tag
+  /javascript:/i,                       // XSS javascript: URI
+  /on(load|error|click|mouse)\s*=/i,   // XSS event handlers
+  /exec\s*\(/i,                         // Code execution
+  /eval\s*\(/i,                         // JS eval injection
+];
+
+app.use((req, res, next) => {
+  const checkStr = decodeURIComponent(
+    (req.url + JSON.stringify(req.query) + JSON.stringify(req.body || ''))
+  );
+  for (const pattern of SUSPICIOUS_PATTERNS) {
+    if (pattern.test(checkStr)) {
+      console.warn(`[SECURITY] Blocked suspicious request from ${req.ip}: ${req.method} ${req.path}`);
+      return res.status(400).json({ error: 'Bad request.' });
+    }
+  }
+  next();
+});
+
+// ── 7. Block Oversized Payloads (prevents memory exhaustion) ─────────────────
+// Already set below via express.json limit — also block at middleware level
+app.use((req, res, next) => {
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (contentLength > 5 * 1024 * 1024) { // 5 MB hard cap
+    return res.status(413).json({ error: 'Payload too large.' });
+  }
+  next();
+});
+
 app.use(cors(cloud.corsOptions));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' })); // reduced from 10mb
 cloud.attachRoutes(app);
 
 // ─── Serve Admin Dashboard as static files ────────────────────────────────────
@@ -692,8 +787,128 @@ app.delete('/admin/employees/:id', adminAuthenticate, async (req, res) => {
   catch (err) { console.error('DELETE /admin/employees/:id:', err); res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' }); }
 });
 
+// ─── Happenings / Audit History Endpoint ──────────────────────────────────────
+async function handleGetHappenings(req, res) {
+  try {
+    const { start, end } = req.query;
+
+    // All timestamp columns here are bigint (epoch ms)
+    const startMs = start ? new Date(start).getTime() : null;
+    const endMs   = end   ? new Date(end).getTime()   : null;
+
+    // --- inventory: pull from sync_inventory_event (where stock changes are actually recorded)
+    // Only show manual restocks/adjustments — exclude "Order sale:" deductions
+    let invRows = [];
+    if (startMs !== null && endMs !== null) {
+      const r = await db.query(
+        `SELECT sie.event_id, sie.ingredient_id, sie.delta_quantity, sie.reason, sie.created_at,
+                i.name AS ingredient_name
+         FROM sync_inventory_event sie
+         LEFT JOIN ingredient i ON i.id = sie.ingredient_id
+         WHERE sie.created_at >= $1 AND sie.created_at < $2
+           AND sie.reason NOT LIKE 'Order sale:%'
+         ORDER BY sie.created_at DESC LIMIT 300`,
+        [startMs, endMs]
+      ).catch(() => ({ rows: [] }));
+      invRows = r.rows || [];
+    } else {
+      const r = await db.query(
+        `SELECT sie.event_id, sie.ingredient_id, sie.delta_quantity, sie.reason, sie.created_at,
+                i.name AS ingredient_name
+         FROM sync_inventory_event sie
+         LEFT JOIN ingredient i ON i.id = sie.ingredient_id
+         WHERE sie.reason NOT LIKE 'Order sale:%'
+         ORDER BY sie.created_at DESC LIMIT 300`
+      ).catch(() => ({ rows: [] }));
+      invRows = r.rows || [];
+    }
+
+    // --- shifts: bigint epoch ms columns (opened_at / closed_at)
+    let shiftRows = [];
+    if (startMs !== null && endMs !== null) {
+      const r = await db.query(
+        `SELECT id, opened_at, closed_at, employee_id, starting_cash_cents, ending_cash_cents
+         FROM shift
+         WHERE (opened_at >= $1 AND opened_at < $2) OR (closed_at IS NOT NULL AND closed_at >= $1 AND closed_at < $2)
+         ORDER BY opened_at DESC LIMIT 100`,
+        [startMs, endMs]
+      ).catch(() => ({ rows: [] }));
+      shiftRows = r.rows || [];
+    } else {
+      const r = await db.query(
+        `SELECT id, opened_at, closed_at, employee_id, starting_cash_cents, ending_cash_cents
+         FROM shift ORDER BY opened_at DESC LIMIT 100`
+      ).catch(() => ({ rows: [] }));
+      shiftRows = r.rows || [];
+    }
+
+    const list = [];
+
+    // --- inventory rows from sync_inventory_event
+    invRows.forEach(row => {
+      const delta = parseFloat(row.delta_quantity) || 0;
+      const isRestock = delta > 0;
+      const ingName = row.ingredient_name || row.ingredient_id;
+      list.push({
+        id: 'inv-' + row.event_id,
+        eventType: isRestock ? 'INVENTORY_RESTOCK' : 'INVENTORY_ADJUSTMENT',
+        category: 'Inventory',
+        title: isRestock ? 'Stock Restocked' : 'Stock Adjusted',
+        description: `${ingName}: ${isRestock ? '+' : ''}${delta} — ${row.reason || 'Manual adjustment'}`,
+        actorName: row.device_id || 'Staff',
+        amountCents: null,
+        deltaQty: delta,
+        timestamp: parseInt(row.created_at, 10)
+      });
+    });
+
+    // --- shift rows
+    shiftRows.forEach(row => {
+      if (row.opened_at) {
+        list.push({
+          id: 'shift-open-' + row.id,
+          eventType: 'SHIFT_OPENED',
+          category: 'Shifts',
+          title: 'Shift Opened',
+          description: `Shift #${row.id} opened with ₱${((row.starting_cash_cents || 0) / 100).toFixed(2)} starting cash`,
+          actorName: row.employee_id || 'Staff',
+          amountCents: row.starting_cash_cents,
+          timestamp: parseInt(row.opened_at, 10)
+        });
+      }
+      if (row.closed_at) {
+        list.push({
+          id: 'shift-close-' + row.id,
+          eventType: 'SHIFT_CLOSED',
+          category: 'Shifts',
+          title: 'Shift Closed',
+          description: `Shift #${row.id} closed with ₱${((row.ending_cash_cents || 0) / 100).toFixed(2)} ending cash`,
+          actorName: row.employee_id || 'Staff',
+          amountCents: row.ending_cash_cents,
+          timestamp: parseInt(row.closed_at, 10)
+        });
+      }
+    });
+
+    list.sort((a, b) => b.timestamp - a.timestamp);
+    res.json(list);
+  } catch (err) {
+    console.error('GET happenings error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+app.get('/admin/happenings', adminAuthenticate, handleGetHappenings);
+app.get('/rest/v1/happenings', (req, res, next) => {
+  adminAuthenticate(req, res, (err) => {
+    if (!err && req.admin) return handleGetHappenings(req, res);
+    authenticate(req, res, () => handleGetHappenings(req, res));
+  });
+});
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
+
 app.get('/ready', async (req, res) => {
   try {
     const requiredTables = ['sync_device', 'sync_enrollment', 'sync_mutation', 'sync_change',

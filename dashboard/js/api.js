@@ -35,7 +35,14 @@ const api = {
     return apiFetch(`/admin/sales?days=${days}`);
   },
   getOrders: (limit = 50, offset = 0) => apiFetch(`/admin/orders?limit=${limit}&offset=${offset}`),
+  getHappenings: (start, end) => {
+    const params = new URLSearchParams();
+    if (start) params.append('start', start);
+    if (end) params.append('end', end);
+    return apiFetch(`/admin/happenings?${params.toString()}`);
+  },
   getInventory: (customRange = null) => {
+
     if (customRange?.fromDate && customRange?.toDate) {
       return apiFetch(`/admin/inventory?fromDate=${customRange.fromDate}&toDate=${customRange.toDate}`);
     }
@@ -156,7 +163,9 @@ function formatPeso(cents) {
 // Utility: format timestamp
 function formatDate(ms) {
   if (!ms) return '—';
-  return new Date(parseInt(ms)).toLocaleString('en-PH', {
+  const d = typeof ms === 'number' ? new Date(ms) : new Date(ms);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-PH', {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', hour12: true
   });

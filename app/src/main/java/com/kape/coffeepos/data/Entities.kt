@@ -283,3 +283,15 @@ data class PendingDelete(
     val deletedAt: Long,
     val synced: Boolean = false
 )
+
+@Entity
+data class AuditLog(
+    @PrimaryKey val id: String = java.util.UUID.randomUUID().toString(),
+    val eventType: String,
+    val actorName: String,
+    val description: String,
+    val amountCents: Int? = null,
+    val createdAt: Long,
+    val synced: Boolean = false
+)
+

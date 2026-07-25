@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Activity History — Kanlungan Coffee Garage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    .filter-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border-color, #444);
+      background: transparent;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .filter-btn.active {
+      background: var(--accent, #e5a93c);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent, #e5a93c);
+    }
+    .badge-cat {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .cat-orders { background: rgba(76, 175, 80, 0.2); color: #4caf50; }
+    .cat-shifts { background: rgba(156, 39, 176, 0.2); color: #ab47bc; }
+    .cat-inventory { background: rgba(255, 152, 0, 0.2); color: #ffa726; }
+    .cat-system { background: rgba(33, 150, 243, 0.2); color: #42a5f5; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="images/logo.png" alt="Kanlungan Coffee Garage Logo"/>
+      <div class="sidebar-logo-text">
+        <h2>Kanlungan<br/>Coffee Garage</h2>
+        <p>Admin Panel</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Main</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">📊</span> Overview</a>
+      <a href="orders.html" class="nav-item"><span class="nav-icon">🧾</span> Orders</a>
+      <a href="history.html" class="nav-item active"><span class="nav-icon">🕒</span> Activity History</a>
+      <a href="reports.html" class="nav-item"><span class="nav-icon">📈</span> Reports</a>
+      <div class="nav-section" style="margin-top:12px">Manage</div>
+      <a href="menu.html" class="nav-item"><span class="nav-icon">🍵</span> Menu</a>
+      <a href="promotions.html" class="nav-item"><span class="nav-icon">🎁</span> Promotions</a>
+      <a href="discounts.html" class="nav-item"><span class="nav-icon">%</span> Discount Settings</a>
+      <a href="payment-void-settings.html" class="nav-item"><span class="nav-icon">💳</span> Payment &amp; Void Settings</a>
+      <a href="data-maintenance.html" class="nav-item"><span class="nav-icon">🗄️</span> Data Maintenance</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">👥</span> Employees</a>
+      <a href="inventory.html" class="nav-item"><span class="nav-icon">📦</span> Inventory</a>
+      <a href="devices.html" class="nav-item"><span class="nav-icon">📱</span> Cloud Devices</a>
+    </nav>
+    <div class="sidebar-footer"><span>Live</span><span class="sync-dot"></span></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div><h1>Activity History</h1><div style="font-size:13px;color:var(--text-muted);">Detect and inspect all system happenings</div></div>
+      <div class="topbar-right">
+        <span class="topbar-time" id="topbarTime"></span>
+        <button class="btn-logout" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="content fade-up">
+      <div class="card">
+        <div class="card-header" style="flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-muted);font-weight:600;">DATE:</span>
+            <select id="dateDropdown" onchange="filterDate(this.value)" style="
+              background:#f5f0e8;
+              color:#3b2a1a;
+              border:1.5px solid #c8a96e;
+              border-radius:8px;
+              padding:7px 14px;
+              font-size:13px;
+              font-weight:600;
+              cursor:pointer;
+              outline:none;
+              min-width:150px;
+            ">
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="custom">Custom Date...</option>
+              <option value="all">All Time</option>
+            </select>
+            <input type="date" id="customDateInput" style="
+              display:none;
+              background:var(--bg-card,#1e1e2e);
+              color:var(--text-primary,#fff);
+              border:1.5px solid var(--accent,#c8a96e);
+              border-radius:8px;
+              padding:7px 12px;
+              font-size:13px;
+              outline:none;
+            " onchange="loadHappenings()" />
+            <span style="font-size:12px;color:var(--text-muted);font-weight:600;margin-left:8px;">CATEGORY:</span>
+            <button class="filter-btn active" id="btnCatAll" onclick="filterCat('all')">All</button>
+            <button class="filter-btn" id="btnCatShifts" onclick="filterCat('shifts')">🔄 Shifts</button>
+            <button class="filter-btn" id="btnCatInventory" onclick="filterCat('inventory')">📦 Inventory</button>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="text" class="input" id="searchInput" placeholder="Search happenings..." onkeyup="renderHappenings()" style="width:220px;"/>
+            <button class="btn btn-outline" onclick="loadHappenings()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <div id="historyTable">
+          <div class="loading"><div class="spinner"></div> Loading happenings...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+  requireAuth(); startClock();
+  let currentFilter = 'today';
+  let currentCatFilter = 'all';
+  let allHappenings = [];
+
+  function escapeHtml(val) {
+    return String(val ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+
+  function filterDate(type) {
+    currentFilter = type;
+    const customInput = document.getElementById('customDateInput');
+    if (type === 'custom') {
+      customInput.style.display = 'block';
+      // Set default to today if empty
+      if (!customInput.value) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        customInput.value = `${y}-${m}-${d}`;
+      }
+    } else {
+      customInput.style.display = 'none';
+      loadHappenings();
+    }
+  }
+
+  function filterCat(cat) {
+    currentCatFilter = cat;
+    document.getElementById('btnCatAll').classList.toggle('active', cat === 'all');
+    document.getElementById('btnCatShifts').classList.toggle('active', cat === 'shifts');
+    document.getElementById('btnCatInventory').classList.toggle('active', cat === 'inventory');
+    renderHappenings();
+  }
+
+  async function loadHappenings() {
+    const el = document.getElementById('historyTable');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading happenings...</div>';
+
+    let start = null, end = null;
+    const now = new Date();
+
+    if (currentFilter === 'today') {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      start = d.toISOString();
+      const d2 = new Date(d.getTime() + 86400000);
+      end = d2.toISOString();
+    } else if (currentFilter === 'yesterday') {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+      start = d.toISOString();
+      const d2 = new Date(d.getTime() + 86400000);
+      end = d2.toISOString();
+    } else if (currentFilter === 'custom') {
+      const val = document.getElementById('customDateInput').value;
+      if (val) {
+        const [y, m, d] = val.split('-').map(Number);
+        const picked = new Date(y, m - 1, d, 0, 0, 0, 0);
+        start = picked.toISOString();
+        end = new Date(picked.getTime() + 86400000).toISOString();
+      }
+    }
+    // 'all' leaves start/end as null → no filter applied
+
+    try {
+      allHappenings = await api.getHappenings(start, end) || [];
+      renderHappenings();
+    } catch (err) {
+      console.error(err);
+      el.innerHTML = `<div class="empty-state"><span class="icon">⚠️</span><p>Error loading activity history: ${escapeHtml(err.message)}</p></div>`;
+    }
+  }
+
+  function renderHappenings() {
+    const el = document.getElementById('historyTable');
+    const q = (document.getElementById('searchInput').value || '').toLowerCase();
+    const filtered = allHappenings.filter(h => {
+      const catMatch = currentCatFilter === 'all'
+        || (currentCatFilter === 'shifts' && h.category === 'Shifts')
+        || (currentCatFilter === 'inventory' && h.category === 'Inventory');
+      const textMatch = !q || (h.title + ' ' + h.description + ' ' + h.actorName + ' ' + h.category).toLowerCase().includes(q);
+      return catMatch && textMatch;
+    });
+
+    if (!filtered.length) {
+      el.innerHTML = '<div class="empty-state"><span class="icon">📭</span><p>No shifts or inventory changes found for the selected period</p></div>';
+      return;
+    }
+
+    el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table">
+      <thead><tr>
+        <th>Category</th><th>Event / Action</th><th>Description</th><th>User / Actor</th><th>Date &amp; Time</th><th>Qty / Amount</th>
+      </tr></thead>
+      <tbody>${filtered.map(h => {
+        const catClass = 'cat-' + (h.category || 'system').toLowerCase();
+        let amtStr, amtColor;
+        if (h.category === 'Inventory' && h.deltaQty != null) {
+          const isPos = h.deltaQty > 0;
+          amtStr = (isPos ? '+' : '') + Number(h.deltaQty).toLocaleString() + ' units';
+          amtColor = isPos ? 'var(--success, #4ade80)' : '#f87171';
+        } else if (h.amountCents != null) {
+          amtStr = formatPeso(h.amountCents);
+          amtColor = 'var(--accent)';
+        } else {
+          amtStr = '—';
+          amtColor = 'var(--text-muted)';
+        }
+        return `<tr>
+          <td><span class="badge-cat ${catClass}">${escapeHtml(h.category)}</span></td>
+          <td style="font-weight:600;color:#fff;">${escapeHtml(h.title)}</td>
+          <td style="font-size:13px;color:var(--text-muted);">${escapeHtml(h.description)}</td>
+          <td style="font-size:13px;">${escapeHtml(h.actorName || 'Staff')}</td>
+          <td style="font-size:12px;color:var(--text-muted);">${formatDate(h.timestamp)}</td>
+          <td style="font-weight:700;color:${amtColor};">${amtStr}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+  }
+
+  loadHappenings();
+</script>
+</body>
+</html>

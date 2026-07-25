@@ -726,7 +726,9 @@ private fun AppShell(state: PosUiState, viewModel: PosViewModel, onShowLowStockR
                         AppScreen.MENU -> MenuScreen(state, viewModel)
                         AppScreen.MANAGER -> ManagerScreen(state, viewModel)
                         AppScreen.DRAWER -> DrawerScreen(state, viewModel)
+                        AppScreen.HISTORY -> HistoryScreen(state, viewModel)
                     }
+
                 }
             }
         }
@@ -3224,9 +3226,165 @@ private fun MetricCard(label: String, value: String, modifier: Modifier) {
     }
 }
 
+@Composable
+private fun HistoryScreen(state: PosUiState, viewModel: PosViewModel) {
+    val dateFormat = remember { manilaDateFormat("MMM dd, yyyy · hh:mm a") }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Activity History",
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+                Text(
+                    text = "Detect and inspect all occurrences across system",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFAAAAAA)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.loadHappenings() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
+                ) {
+                    Text("🔄 Refresh", color = Color.White)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Date Filter Row
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Date Filter:", style = MaterialTheme.typography.titleSmall, color = Color.White)
+            FilterChip(
+                selected = state.historyDateFilter == com.kape.coffeepos.viewmodel.HistoryDateFilter.TODAY,
+                onClick = { viewModel.loadHappenings(com.kape.coffeepos.viewmodel.HistoryDateFilter.TODAY) },
+                label = { Text("Today (7/25/2026)") }
+            )
+            FilterChip(
+                selected = state.historyDateFilter == com.kape.coffeepos.viewmodel.HistoryDateFilter.YESTERDAY,
+                onClick = { viewModel.loadHappenings(com.kape.coffeepos.viewmodel.HistoryDateFilter.YESTERDAY) },
+                label = { Text("Yesterday (7/24/2026)") }
+            )
+            FilterChip(
+                selected = state.historyDateFilter == com.kape.coffeepos.viewmodel.HistoryDateFilter.ALL,
+                onClick = { viewModel.loadHappenings(com.kape.coffeepos.viewmodel.HistoryDateFilter.ALL) },
+                label = { Text("All Time") }
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        if (state.historyLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color.White)
+            }
+        } else if (state.happenings.isEmpty()) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF222222), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No recorded happenings found for selected date.",
+                    color = Color(0xFFAAAAAA),
+                    fontSize = 16.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(state.happenings, key = { it.id }) { happening ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF242424)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val catColor = when (happening.category) {
+                                        "Orders" -> Color(0xFF4CAF50)
+                                        "Shifts" -> Color(0xFF9C27B0)
+                                        "Inventory" -> Color(0xFFFF9800)
+                                        else -> Color(0xFF2196F3)
+                                    }
+                                    Surface(
+                                        color = catColor.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = happening.category.uppercase(Locale.US),
+                                            color = catColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = happening.title,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = happening.description,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFCCCCCC)
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "${dateFormat.format(Date(happening.timestamp))} · Actor: ${happening.actorName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF888888)
+                                )
+                            }
+                            if (happening.amountCents != null) {
+                                Text(
+                                    text = String.format(Locale.US, "₱%.2f", happening.amountCents / 100.0),
+                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFFFFC107)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DevicesScreen(state: PosUiState, viewModel: PosViewModel) {
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->

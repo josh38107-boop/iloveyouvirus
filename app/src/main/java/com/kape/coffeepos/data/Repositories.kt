@@ -1618,3 +1618,160 @@ class ReportsRepository(
     // Keep a default all-time flow for backward compat
     val dailyReport: Flow<DailyReport> get() = reportFlow(ReportDateRange.TODAY)
 }
+
+data class Happening(
+    val id: String,
+    val eventType: String,
+    val category: String,
+    val title: String,
+    val description: String,
+    val actorName: String,
+    val amountCents: Int? = null,
+    val timestamp: Long
+)
+
+class AuditLogRepository(
+    private val database: AppDatabase
+) {
+    val auditLogs: Flow<List<AuditLog>> = database.auditLogDao().auditLogsFlow()
+
+    suspend fun record(
+        eventType: String,
+        actorName: String,
+        description: String,
+        amountCents: Int? = null
+    ) {
+        val entry = AuditLog(
+            eventType = eventType,
+            actorName = actorName,
+            description = description,
+            amountCents = amountCents,
+            createdAt = System.currentTimeMillis(),
+            synced = false
+        )
+        database.auditLogDao().insertAuditLog(entry)
+    }
+
+    suspend fun getHappeningsForRange(startTime: Long, endTime: Long): List<Happening> {
+        val list = mutableListOf<Happening>()
+
+        // 1. Audit Logs
+        val logs = database.auditLogDao().auditLogsInRange(startTime, endTime)
+        logs.forEach { log ->
+            val cat = when {
+                log.eventType.startsWith("ORDER_") -> "Orders"
+                log.eventType.startsWith("SHIFT_") -> "Shifts"
+                log.eventType.startsWith("INVENTORY_") -> "Inventory"
+                else -> "System"
+            }
+            list.add(
+                Happening(
+                    id = log.id,
+                    eventType = log.eventType,
+                    category = cat,
+                    title = log.eventType.replace("_", " "),
+                    description = log.description,
+                    actorName = log.actorName,
+                    amountCents = log.amountCents,
+                    timestamp = log.createdAt
+                )
+            )
+        }
+
+        // 2. PosOrders in range
+        val orders = database.orderDao().ordersNow().filter { it.createdAt in startTime until endTime }
+        orders.forEach { order ->
+            val isVoid = order.status.lowercase() == "void"
+            val title = if (isVoid) "Order Voided" else "Order Paid"
+            val type = if (isVoid) "ORDER_VOIDED" else "ORDER_PAID"
+            val desc = if (isVoid) {
+                "Order #${order.id.take(8).uppercase(Locale.US)} voided (${order.orderType}). Reason: ${order.voidReason ?: "N/A"}"
+            } else {
+                "Order #${order.id.take(8).uppercase(Locale.US)} checkout completed (${order.orderType}) for customer ${order.customerName ?: "Walk-in"}"
+            }
+            list.add(
+                Happening(
+                    id = "order-" + order.id,
+                    eventType = type,
+                    category = "Orders",
+                    title = title,
+                    description = desc,
+                    actorName = order.employeeId.ifBlank { "Staff" },
+                    amountCents = order.totalCents,
+                    timestamp = order.createdAt
+                )
+            )
+        }
+
+        // 3. Inventory Adjustments in range
+        val adjs = database.orderDao().adjustmentsNow().filter { it.createdAt in startTime until endTime }
+        adjs.forEach { adj ->
+            val amountStr = if (adj.deltaQuantity >= 0) "+${adj.deltaQuantity}" else "${adj.deltaQuantity}"
+            list.add(
+                Happening(
+                    id = "inv-" + adj.id + "-" + adj.eventId,
+                    eventType = "INVENTORY_ADJUSTED",
+                    category = "Inventory",
+                    title = "Inventory Adjustment",
+                    description = "${adj.ingredientId}: ${amountStr} (${adj.reason})",
+                    actorName = "System / Staff",
+                    amountCents = null,
+                    timestamp = adj.createdAt
+                )
+            )
+        }
+
+        // 4. Closed Shift Adjustments in range
+        val csAdjs = database.orderDao().closedShiftAdjustmentsNow().filter { it.createdAt in startTime until endTime }
+        csAdjs.forEach { ca ->
+            list.add(
+                Happening(
+                    id = "csadj-" + ca.id,
+                    eventType = "CLOSED_SHIFT_" + ca.type.uppercase(Locale.US),
+                    category = "Shifts",
+                    title = "Closed Shift " + ca.type.replaceFirstChar { it.uppercase() },
+                    description = "Adjustment for Order #${ca.originalOrderId.take(8).uppercase(Locale.US)}: ${ca.reason}",
+                    actorName = ca.staffId,
+                    amountCents = ca.amountCents,
+                    timestamp = ca.createdAt
+                )
+            )
+        }
+
+        // 5. Shifts opened / closed in range
+        val shifts = database.orderDao().allShiftsNow()
+        shifts.forEach { shift ->
+            if (shift.openedAt in startTime until endTime) {
+                list.add(
+                    Happening(
+                        id = "shift-open-" + shift.id,
+                        eventType = "SHIFT_OPENED",
+                        category = "Shifts",
+                        title = "Shift Opened",
+                        description = "Shift #${shift.id} opened with starting cash",
+                        actorName = shift.employeeId,
+                        amountCents = shift.startingCashCents,
+                        timestamp = shift.openedAt
+                    )
+                )
+            }
+            if (shift.closedAt != null && shift.closedAt in startTime until endTime) {
+                list.add(
+                    Happening(
+                        id = "shift-close-" + shift.id,
+                        eventType = "SHIFT_CLOSED",
+                        category = "Shifts",
+                        title = "Shift Closed",
+                        description = "Shift #${shift.id} closed",
+                        actorName = shift.employeeId,
+                        amountCents = shift.endingCashCents,
+                        timestamp = shift.closedAt
+                    )
+                )
+            }
+        }
+
+        return list.sortedByDescending { it.timestamp }
+    }
+}
+

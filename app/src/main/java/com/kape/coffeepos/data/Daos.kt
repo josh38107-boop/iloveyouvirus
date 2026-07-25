@@ -380,9 +380,13 @@ interface OrderDao {
     @Query("SELECT * FROM ClosedShiftAdjustment")
     suspend fun closedShiftAdjustmentsNow(): List<ClosedShiftAdjustment>
 
+    @Query("SELECT * FROM Shift")
+    suspend fun allShiftsNow(): List<Shift>
+
     @Query("DELETE FROM ClosedShiftAdjustment")
     suspend fun clearClosedShiftAdjustments()
 }
+
 
 @Dao
 interface SettingsDao {
@@ -461,3 +465,22 @@ interface PendingDeleteDao {
     @Query("DELETE FROM PendingDelete WHERE entityType = :entityType AND entityId = :entityId")
     suspend fun delete(entityType: String, entityId: String)
 }
+
+@Dao
+interface AuditLogDao {
+    @Query("SELECT * FROM AuditLog ORDER BY createdAt DESC")
+    fun auditLogsFlow(): Flow<List<AuditLog>>
+
+    @Query("SELECT * FROM AuditLog WHERE createdAt >= :startTime AND createdAt < :endTime ORDER BY createdAt DESC")
+    suspend fun auditLogsInRange(startTime: Long, endTime: Long): List<AuditLog>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAuditLog(row: AuditLog)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAuditLogs(rows: List<AuditLog>)
+
+    @Query("SELECT * FROM AuditLog WHERE synced = 0")
+    suspend fun unsyncedNow(): List<AuditLog>
+}
+

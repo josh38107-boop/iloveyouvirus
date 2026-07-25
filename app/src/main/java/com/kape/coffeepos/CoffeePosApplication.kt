@@ -2,6 +2,7 @@ package com.kape.coffeepos
 
 import android.app.Application
 import com.kape.coffeepos.data.AppDatabase
+import com.kape.coffeepos.data.AuditLogRepository
 import com.kape.coffeepos.data.EmployeeRepository
 import com.kape.coffeepos.data.InventoryRepository
 import com.kape.coffeepos.data.MenuRepository
@@ -30,6 +31,7 @@ class CoffeePosApplication : Application() {
         val inventoryRepository = InventoryRepository(db.inventoryDao(), pendingDeleteDao)
         val syncManager = SupabaseSyncManager(this, db)
         val orderRepository = OrderRepository(db, db.orderDao(), db.shiftDao(), settingsRepository, inventoryRepository, db.menuDao(), syncManager)
+        val auditLogRepository = AuditLogRepository(db)
 
         container = AppContainer(
             seedData = SeedData(db),
@@ -40,6 +42,7 @@ class CoffeePosApplication : Application() {
             settingsRepository = settingsRepository,
             orderRepository = orderRepository,
             reportsRepository = ReportsRepository(orderRepository, inventoryRepository, db.orderDao(), db.employeeDao()),
+            auditLogRepository = auditLogRepository,
             printerManager = BluetoothPrinterManager(this),
             supabaseSyncManager = syncManager
         )
@@ -58,6 +61,8 @@ data class AppContainer(
     val settingsRepository: SettingsRepository,
     val orderRepository: OrderRepository,
     val reportsRepository: ReportsRepository,
+    val auditLogRepository: AuditLogRepository,
     val printerManager: BluetoothPrinterManager,
     val supabaseSyncManager: SupabaseSyncManager
 )
+
