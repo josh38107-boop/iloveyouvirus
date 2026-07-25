@@ -3824,7 +3824,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         if (report.topItems.isEmpty()) {
             sb.appendLine("  No items sold")
         } else {
-            report.topItems.take(5).forEach { item ->
+            report.topItems.forEach { item ->
                 val cleanedName = item.name.replace('\n', ' ').replace('\r', ' ')
                 val left = "${item.qtySold}x $cleanedName"
                 val right = formatMoney(item.revenueCents)

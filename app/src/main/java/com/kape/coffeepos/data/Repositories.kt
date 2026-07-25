@@ -1450,8 +1450,8 @@ class ReportsRepository(
                     revenueCents = nonComplimentaryLines.sumOf { it.quantity * it.unitPriceCents }
                 )
             }
+            .filter { it.qtySold > 0 }
             .sortedByDescending { it.qtySold }
-            .take(5)
 
         val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Manila"))
         val hourlySales = paidNonComplimentary
@@ -1571,24 +1571,21 @@ class ReportsRepository(
 
         // Ingredient usage from adjustments in window
         val filteredAdj = adjustments.filter { it.createdAt in windowStart..windowEnd }
-        val ingredientMap = ingredients.associateBy { it.id }
-        val ingredientUsage = filteredAdj
-            .groupBy { it.ingredientId }
-            .map { (ingId, adjs) ->
-                val ingredient = ingredientMap[ingId]
-                val used = adjs.filter { it.deltaQuantity < 0 }.sumOf { -it.deltaQuantity }
-                val restocked = adjs.filter { it.deltaQuantity > 0 }.sumOf { it.deltaQuantity }
-                IngredientUsageSummary(
-                    ingredientId = ingId,
-                    name = ingredient?.name ?: ingId,
-                    unit = ingredient?.unit ?: "",
-                    usedToday = used,
-                    restocked = restocked,
-                    endingStock = ingredient?.quantityOnHand ?: 0.0,
-                    isLow = ingredient != null && ingredient.quantityOnHand <= ingredient.lowStockThreshold
-                )
-            }
-            .sortedBy { it.name }
+        val adjByIngredient = filteredAdj.groupBy { it.ingredientId }
+        val ingredientUsage = ingredients.map { ingredient ->
+            val adjs = adjByIngredient[ingredient.id].orEmpty()
+            val used = adjs.filter { it.deltaQuantity < 0 }.sumOf { -it.deltaQuantity }
+            val restocked = adjs.filter { it.deltaQuantity > 0 }.sumOf { it.deltaQuantity }
+            IngredientUsageSummary(
+                ingredientId = ingredient.id,
+                name = ingredient.name,
+                unit = ingredient.unit,
+                usedToday = used,
+                restocked = restocked,
+                endingStock = ingredient.quantityOnHand,
+                isLow = ingredient.quantityOnHand <= ingredient.lowStockThreshold
+            )
+        }.sortedBy { it.name }
 
         DailyReport(
             orderCount = orderCount,

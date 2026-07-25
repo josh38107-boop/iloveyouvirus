@@ -364,7 +364,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM order_line ol
         JOIN pos_order o ON o.id = ol.order_id
         WHERE o.created_at >= $1 AND o.status != 'void'
-        GROUP BY name ORDER BY qty DESC LIMIT 5
+        GROUP BY name ORDER BY qty DESC
       `, [fromMs]),
       db.query(`
         SELECT method, payment_category, SUM(amount_cents) as total

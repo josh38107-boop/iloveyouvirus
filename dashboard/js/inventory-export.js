@@ -124,7 +124,8 @@
         numberCell(`C${r}`, item.quantity_on_hand, 6), textCell(`D${r}`, item.unit, 5),
         numberCell(`E${r}`, item.low_stock_threshold, 6),
         textCell(`F${r}`, item.low_stock ? 'Low Stock' : 'OK', 5),
-        numberCell(`G${r}`, 0, 6), numberCell(`H${r}`, 0, 6)
+        numberCell(`G${r}`, item.qty_used ?? item.used ?? 0, 6),
+        numberCell(`H${r}`, item.qty_restocked ?? item.restocked ?? 0, 6)
       ]));
     });
 

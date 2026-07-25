@@ -67,10 +67,33 @@ function createInventoryService(db, options = {}) {
     const result = await db.query(`SELECT ingredient.id, ingredient.name, ingredient.unit,
         COALESCE(balance.quantity, ingredient.quantity_on_hand) AS quantity_on_hand,
         ingredient.low_stock_threshold, ingredient.takeout_only,
-        (COALESCE(balance.quantity, ingredient.quantity_on_hand) <= ingredient.low_stock_threshold) AS low_stock
+        (COALESCE(balance.quantity, ingredient.quantity_on_hand) <= ingredient.low_stock_threshold) AS low_stock,
+        COALESCE(used_events.qty_used, 0) + COALESCE(recipe_usage.qty_used, 0) AS qty_used,
+        COALESCE(used_events.qty_restocked, 0) AS qty_restocked
       FROM ingredient
       LEFT JOIN inventory_balance balance
         ON balance.ingredient_id = ingredient.id AND balance.branch_id = $1
+      LEFT JOIN (
+        SELECT ingredient_id,
+          COALESCE(SUM(CASE WHEN delta_quantity < 0 THEN -delta_quantity ELSE 0 END), 0) AS qty_used,
+          COALESCE(SUM(CASE WHEN delta_quantity > 0 THEN delta_quantity ELSE 0 END), 0) AS qty_restocked
+        FROM sync_inventory_event
+        WHERE branch_id = $1
+        GROUP BY ingredient_id
+      ) used_events ON used_events.ingredient_id = ingredient.id
+      LEFT JOIN (
+        SELECT ri.ingredient_id,
+          COALESCE(SUM(ri.quantity_used * ol.quantity), 0) AS qty_used
+        FROM order_line ol
+        JOIN pos_order o ON o.id = ol.order_id
+        JOIN recipe_ingredient ri ON ri.item_id = ol.item_id
+        WHERE o.status != 'void'
+          AND NOT EXISTS (
+            SELECT 1 FROM sync_inventory_event e 
+            WHERE e.branch_id = $1 AND e.ingredient_id = ri.ingredient_id
+          )
+        GROUP BY ri.ingredient_id
+      ) recipe_usage ON recipe_usage.ingredient_id = ingredient.id
       WHERE NOT EXISTS (
         SELECT 1 FROM sync_tombstone tombstone
         WHERE tombstone.branch_id = $1 AND tombstone.entity_type = 'ingredient'
