@@ -22,10 +22,25 @@ async function apiFetch(path, options = {}) {
 
 // Admin endpoints
 const api = {
-  getStats: (days = 1) => apiFetch(`/admin/stats?days=${days}`),
-  getSales: (days = 7) => apiFetch(`/admin/sales?days=${days}`),
+  getStats: (days = 1, customRange = null) => {
+    if (customRange?.fromDate && customRange?.toDate) {
+      return apiFetch(`/admin/stats?fromDate=${customRange.fromDate}&toDate=${customRange.toDate}`);
+    }
+    return apiFetch(`/admin/stats?days=${days}`);
+  },
+  getSales: (days = 7, customRange = null) => {
+    if (customRange?.fromDate && customRange?.toDate) {
+      return apiFetch(`/admin/sales?fromDate=${customRange.fromDate}&toDate=${customRange.toDate}`);
+    }
+    return apiFetch(`/admin/sales?days=${days}`);
+  },
   getOrders: (limit = 50, offset = 0) => apiFetch(`/admin/orders?limit=${limit}&offset=${offset}`),
-  getInventory: () => apiFetch('/admin/inventory'),
+  getInventory: (customRange = null) => {
+    if (customRange?.fromDate && customRange?.toDate) {
+      return apiFetch(`/admin/inventory?fromDate=${customRange.fromDate}&toDate=${customRange.toDate}`);
+    }
+    return apiFetch('/admin/inventory');
+  },
   createInventoryIngredient: (ingredient) => apiFetch('/admin/inventory', {
     method: 'POST', body: JSON.stringify(ingredient)
   }),

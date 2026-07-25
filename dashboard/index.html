@@ -47,12 +47,29 @@
     <div class="topbar">
       <div>
         <h1>Overview</h1>
-        <div style="font-size:13px;color:var(--text-muted);">Today's summary</div>
+        <div id="overviewSubtitle" style="font-size:13px;color:var(--text-muted);">Summary for Last 7 days</div>
       </div>
       <div class="topbar-right">
+        <select class="input" id="periodSelect" onchange="onPeriodChange()" style="padding:7px 12px;font-size:13px;">
+          <option value="1">Today</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="custom">Custom Range...</option>
+        </select>
         <span class="topbar-time" id="topbarTime"></span>
         <button class="btn-logout" onclick="logout()">Sign Out</button>
       </div>
+    </div>
+
+    <!-- Custom date range picker row (hidden by default) -->
+    <div id="customRangeRow" style="display:none;align-items:center;gap:10px;padding:10px 24px 0;flex-wrap:wrap;">
+      <label for="dateFrom" style="font-size:13px;font-weight:600;color:var(--text-muted);">From:</label>
+      <input type="date" id="dateFrom" class="input" style="padding:6px 10px;font-size:13px;width:150px;" />
+      <label for="dateTo" style="font-size:13px;font-weight:600;color:var(--text-muted);">To:</label>
+      <input type="date" id="dateTo" class="input" style="padding:6px 10px;font-size:13px;width:150px;" />
+      <button class="btn" onclick="loadOverview()" style="background:var(--accent,#f5a623);color:#fff;border-radius:99px;padding:7px 18px;font-weight:600;font-size:13px;">Apply</button>
+      <span id="customRangeError" style="color:#e74c3c;font-size:12px;"></span>
     </div>
 
     <div class="content fade-up">
@@ -60,15 +77,15 @@
       <div class="stats-grid" id="statsGrid">
         <div class="stat-card">
           <span class="stat-icon">🧾</span>
-          <div class="stat-label">Orders Today</div>
+          <div class="stat-label">Total Orders</div>
           <div class="stat-value" id="statOrders">—</div>
           <div class="stat-sub">Completed transactions</div>
         </div>
         <div class="stat-card">
           <span class="stat-icon">💰</span>
-          <div class="stat-label">Revenue Today</div>
+          <div class="stat-label">Total Revenue</div>
           <div class="stat-value" id="statRevenue">—</div>
-          <div class="stat-sub">Total sales</div>
+          <div class="stat-sub">Net sales</div>
         </div>
         <div class="stat-card">
           <span class="stat-icon">📊</span>
@@ -80,7 +97,7 @@
           <span class="stat-icon">⭐</span>
           <div class="stat-label">Top Item</div>
           <div class="stat-value" style="font-size:18px;" id="statTop">—</div>
-          <div class="stat-sub">Most ordered today</div>
+          <div class="stat-sub">Most ordered</div>
         </div>
       </div>
 
@@ -89,14 +106,9 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Sales (Last 7 Days)</div>
-              <div class="card-sub">Daily revenue trend</div>
+              <div class="card-title">Daily Revenue</div>
+              <div class="card-sub" id="salesChartSubtitle">Last 7 days</div>
             </div>
-            <select class="input" id="daysSelect" style="padding:6px 10px;font-size:12px;">
-              <option value="7">7 days</option>
-              <option value="14">14 days</option>
-              <option value="30">30 days</option>
-            </select>
           </div>
           <div class="chart-container">
             <canvas id="salesChart"></canvas>
@@ -107,7 +119,7 @@
           <div class="card-header">
             <div>
               <div class="card-title">Payment Methods</div>
-              <div class="card-sub">Today's breakdown</div>
+              <div class="card-sub" id="paymentSubtitle">Last 7 days</div>
             </div>
           </div>
           <div class="chart-container" style="height:200px;">
@@ -121,7 +133,7 @@
       <div class="grid-2">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">🏆 Top Items Today</div>
+            <div class="card-title">🏆 Top Items</div>
           </div>
           <div id="topItemsList">
             <div class="loading"><div class="spinner"></div> Loading...</div>
@@ -150,8 +162,76 @@
 
   let salesChartInst, paymentChartInst;
 
-  async function loadStats() {
-    const stats = await api.getStats();
+  // Set default dates for date pickers (today & 30 days ago)
+  (function initDatePickers() {
+    const today = new Date();
+    const past = new Date();
+    past.setDate(past.getDate() - 29);
+    const fmt = d => d.toISOString().slice(0, 10);
+    document.getElementById('dateTo').value = fmt(today);
+    document.getElementById('dateFrom').value = fmt(past);
+  })();
+
+  function onPeriodChange() {
+    const val = document.getElementById('periodSelect').value;
+    const row = document.getElementById('customRangeRow');
+    row.style.display = val === 'custom' ? 'flex' : 'none';
+    document.getElementById('customRangeError').textContent = '';
+    if (val !== 'custom') loadOverview();
+  }
+
+  function getCustomRange() {
+    const val = document.getElementById('periodSelect').value;
+    if (val === 'custom') {
+      const from = document.getElementById('dateFrom').value;
+      const to = document.getElementById('dateTo').value;
+      if (!from || !to) return null;
+      if (from > to) {
+        document.getElementById('customRangeError').textContent = '"From" date must be before or equal to "To" date.';
+        return undefined; // signal validation error
+      }
+      document.getElementById('customRangeError').textContent = '';
+      return { fromDate: from, toDate: to };
+    }
+    return null;
+  }
+
+  function getPeriodLabel() {
+    const val = document.getElementById('periodSelect').value;
+    if (val === 'custom') {
+      const from = document.getElementById('dateFrom').value;
+      const to = document.getElementById('dateTo').value;
+      if (from && to) {
+        const fmt = s => new Date(s + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+        return from === to ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+      }
+      return 'Custom Range';
+    }
+    return val === '1' ? 'Today' : `Last ${val} days`;
+  }
+
+  async function loadOverview() {
+    const val = document.getElementById('periodSelect').value;
+    let customRange = null;
+    if (val === 'custom') {
+      customRange = getCustomRange();
+      if (customRange === undefined) return;
+    }
+    const days = val === 'custom' ? 30 : parseInt(val);
+    const label = getPeriodLabel();
+
+    document.getElementById('overviewSubtitle').textContent = `Summary for ${label}`;
+    document.getElementById('salesChartSubtitle').textContent = label;
+    document.getElementById('paymentSubtitle').textContent = `${label} breakdown`;
+
+    await Promise.all([
+      loadStats(days, customRange),
+      loadSalesChart(days, customRange)
+    ]);
+  }
+
+  async function loadStats(days = 7, customRange = null) {
+    const stats = await api.getStats(days, customRange);
     if (!stats) return;
 
     const orders = stats.ordersToday || 0;
@@ -159,7 +239,7 @@
     const avg = orders > 0 ? Math.round(revenue / orders) : 0;
     const topItem = stats.topItems?.[0]?.name || '—';
 
-    document.getElementById('statOrders').textContent = orders;
+    document.getElementById('statOrders').textContent = orders.toLocaleString();
     document.getElementById('statRevenue').textContent = formatPeso(revenue);
     document.getElementById('statAvg').textContent = formatPeso(avg);
     document.getElementById('statTop').textContent = topItem;
@@ -178,7 +258,7 @@
         </div>
       `).join('');
     } else {
-      topList.innerHTML = '<div class="empty-state"><span class="icon">📭</span><p>No orders today yet</p></div>';
+      topList.innerHTML = '<div class="empty-state"><span class="icon">📭</span><p>No orders in this period</p></div>';
     }
 
     // Payment chart
@@ -197,15 +277,15 @@
       const colors = ['#f5a623','#3ecf8e','#60a5fa','#f472b6'];
       return `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
         <span style="display:flex;align-items:center;gap:8px;font-size:13px;">
-          <span style="width:10px;height:10px;background:${colors[i]};border-radius:50%;display:inline-block;"></span>${p.method}
+          <span style="width:10px;height:10px;background:${colors[i%colors.length]};border-radius:50%;display:inline-block;"></span>${p.method}
         </span>
         <span style="font-size:13px;color:var(--accent);font-weight:600;">${formatPeso(p.total)}</span>
       </div>`;
     }).join('');
   }
 
-  async function loadSalesChart(days = 7) {
-    const data = await api.getSales(days);
+  async function loadSalesChart(days = 7, customRange = null) {
+    const data = await api.getSales(days, customRange);
     if (!data) return;
     if (salesChartInst) salesChartInst.destroy();
     const ctx = document.getElementById('salesChart').getContext('2d');
@@ -258,13 +338,11 @@
       </tbody></table>`;
   }
 
-  document.getElementById('daysSelect').addEventListener('change', e => loadSalesChart(e.target.value));
-
   // Load all
-  Promise.all([loadStats(), loadSalesChart(7), loadRecentOrders()]);
+  Promise.all([loadOverview(), loadRecentOrders()]);
 
   // Auto-refresh every 60 seconds
-  setInterval(() => { loadStats(); loadRecentOrders(); }, 60000);
+  setInterval(() => { loadOverview(); loadRecentOrders(); }, 60000);
 </script>
 </body>
 </html>

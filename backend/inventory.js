@@ -63,7 +63,15 @@ function createInventoryService(db, options = {}) {
     await recordChange(client, 'sync_tombstone', `${entityType}:${entityId}`, 'delete', result.rows[0]);
   }
 
-  async function list() {
+  async function list(dateRange = null) {
+    const params = [branchId];
+    let eventDateFilter = '';
+    let orderDateFilter = '';
+    if (dateRange && dateRange.fromMs != null && dateRange.toMs != null) {
+      params.push(dateRange.fromMs, dateRange.toMs);
+      eventDateFilter = ` AND sie.created_at >= $2 AND sie.created_at <= $3`;
+      orderDateFilter = ` AND o.created_at >= $2 AND o.created_at <= $3`;
+    }
     const result = await db.query(`SELECT ingredient.id, ingredient.name, ingredient.unit,
         COALESCE(balance.quantity, ingredient.quantity_on_hand) AS quantity_on_hand,
         ingredient.low_stock_threshold, ingredient.takeout_only,
@@ -77,8 +85,8 @@ function createInventoryService(db, options = {}) {
         SELECT ingredient_id,
           COALESCE(SUM(CASE WHEN delta_quantity < 0 THEN -delta_quantity ELSE 0 END), 0) AS qty_used,
           COALESCE(SUM(CASE WHEN delta_quantity > 0 THEN delta_quantity ELSE 0 END), 0) AS qty_restocked
-        FROM sync_inventory_event
-        WHERE branch_id = $1
+        FROM sync_inventory_event sie
+        WHERE sie.branch_id = $1${eventDateFilter}
         GROUP BY ingredient_id
       ) used_events ON used_events.ingredient_id = ingredient.id
       LEFT JOIN (
@@ -87,7 +95,7 @@ function createInventoryService(db, options = {}) {
         FROM order_line ol
         JOIN pos_order o ON o.id = ol.order_id
         JOIN recipe_ingredient ri ON ri.item_id = ol.item_id
-        WHERE o.status != 'void'
+        WHERE o.status != 'void'${orderDateFilter}
           AND NOT EXISTS (
             SELECT 1 FROM sync_inventory_event e 
             WHERE e.branch_id = $1 AND e.ingredient_id = ri.ingredient_id
@@ -99,7 +107,7 @@ function createInventoryService(db, options = {}) {
         WHERE tombstone.branch_id = $1 AND tombstone.entity_type = 'ingredient'
           AND tombstone.entity_id = ingredient.id
       )
-      ORDER BY ingredient.name`, [branchId]);
+      ORDER BY ingredient.name`, params);
     return result.rows;
   }
 

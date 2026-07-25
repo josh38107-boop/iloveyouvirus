@@ -328,13 +328,21 @@ app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, guardOperationalRpc, (req, res, n
 
 // ─── Admin Dashboard API routes ───────────────────────────────────────────────
 
-function reportRange(daysParam) {
+function reportRange(daysParam, fromDate, toDate) {
+  // Custom range: fromDate and toDate are ISO date strings (YYYY-MM-DD)
+  if (fromDate && toDate) {
+    const from = new Date(fromDate + 'T00:00:00+08:00');
+    const to = new Date(toDate + 'T23:59:59+08:00');
+    if (!isNaN(from) && !isNaN(to) && from <= to) {
+      return { days: null, fromMs: from.getTime(), toMs: to.getTime() };
+    }
+  }
   const parsed = parseInt(daysParam, 10);
   const days = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), 365);
   const from = new Date();
   from.setHours(0, 0, 0, 0);
   from.setDate(from.getDate() - (days - 1));
-  return { days, fromMs: from.getTime() };
+  return { days, fromMs: from.getTime(), toMs: Date.now() };
 }
 
 function paymentCategory(row) {
@@ -346,34 +354,34 @@ function paymentCategory(row) {
   return '';
 }
 
-// GET /admin/stats?days=1 — report summary for the selected date range
+// GET /admin/stats?days=1&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — report summary
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
-    const { days, fromMs } = reportRange(req.query.days);
+    const { days, fromMs, toMs } = reportRange(req.query.days, req.query.fromDate, req.query.toDate);
     const [summaryRes, topItemsRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
                COALESCE(SUM(total_cents), 0) as net
         FROM pos_order
-        WHERE created_at >= $1 AND status != 'void'
-      `, [fromMs]),
+        WHERE created_at >= $1 AND created_at <= $2 AND status != 'void'
+      `, [fromMs, toMs]),
       db.query(`
         SELECT name, SUM(quantity) as qty,
                COALESCE(SUM(ol.quantity * ol.unit_price_cents - COALESCE(ol.discount_cents, 0)), 0) as revenue
         FROM order_line ol
         JOIN pos_order o ON o.id = ol.order_id
-        WHERE o.created_at >= $1 AND o.status != 'void'
+        WHERE o.created_at >= $1 AND o.created_at <= $2 AND o.status != 'void'
         GROUP BY name ORDER BY qty DESC
-      `, [fromMs]),
+      `, [fromMs, toMs]),
       db.query(`
         SELECT method, payment_category, SUM(amount_cents) as total
         FROM payment p
         JOIN pos_order o ON o.id = p.order_id
-        WHERE o.created_at >= $1 AND o.status != 'void'
+        WHERE o.created_at >= $1 AND o.created_at <= $2 AND o.status != 'void'
         GROUP BY method, payment_category
         ORDER BY method
-      `, [fromMs]),
+      `, [fromMs, toMs]),
       db.query(`
         SELECT s.id, s.starting_cash_cents, s.ending_cash_cents,
                s.cash_added_cents, s.cash_removed_cents,
@@ -384,21 +392,21 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM shift s
         LEFT JOIN pos_order o ON o.shift_id = s.id AND o.status != 'void'
         LEFT JOIN payment p ON p.order_id = o.id
-        WHERE s.opened_at >= $1
+        WHERE s.opened_at >= $1 AND s.opened_at <= $2
         GROUP BY s.id, s.starting_cash_cents, s.ending_cash_cents,
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
         ORDER BY s.opened_at
-      `, [fromMs]),
+      `, [fromMs, toMs]),
       db.query(`
         SELECT COALESCE(discount_category, 'Discount') AS name,
                COALESCE(discount_scope, 'item') AS scope,
                COUNT(*) AS order_count,
                COALESCE(SUM(discount_cents), 0) AS amount_cents
         FROM pos_order
-        WHERE created_at >= $1 AND status != 'void' AND discount_cents > 0
+        WHERE created_at >= $1 AND created_at <= $2 AND status != 'void' AND discount_cents > 0
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
-      `, [fromMs])
+      `, [fromMs, toMs])
     ]);
 
     const payments = paymentRes.rows;
@@ -446,19 +454,19 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   }
 });
 
-// GET /admin/sales?days=7 — sales chart data
+// GET /admin/sales?days=7&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — sales chart data
 app.get('/admin/sales', adminAuthenticate, async (req, res) => {
   try {
-    const { fromMs } = reportRange(req.query.days || 7);
+    const { fromMs, toMs } = reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
     const result = await db.query(`
       SELECT
         TO_CHAR(TO_TIMESTAMP(created_at / 1000), 'YYYY-MM-DD') as date,
         COUNT(*) as orders,
         COALESCE(SUM(total_cents), 0) as revenue
       FROM pos_order
-      WHERE created_at >= $1 AND status != 'void'
+      WHERE created_at >= $1 AND created_at <= $2 AND status != 'void'
       GROUP BY date ORDER BY date
-    `, [fromMs]);
+    `, [fromMs, toMs]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -483,10 +491,18 @@ app.get('/admin/orders', adminAuthenticate, async (req, res) => {
   }
 });
 
-// GET /admin/inventory — stock levels with low-stock flag
+// GET /admin/inventory?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — stock levels with low-stock flag
 app.get('/admin/inventory', adminAuthenticate, async (req, res) => {
   try {
-    res.json(await inventory.list());
+    let dateRange = null;
+    if (req.query.fromDate && req.query.toDate) {
+      const from = new Date(req.query.fromDate + 'T00:00:00+08:00');
+      const to = new Date(req.query.toDate + 'T23:59:59+08:00');
+      if (!isNaN(from) && !isNaN(to) && from <= to) {
+        dateRange = { fromMs: from.getTime(), toMs: to.getTime() };
+      }
+    }
+    res.json(await inventory.list(dateRange));
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.status ? err.message : 'Internal server error' });
   }

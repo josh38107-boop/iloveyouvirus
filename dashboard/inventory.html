@@ -49,9 +49,27 @@
     <div class="topbar">
       <div><h1>Inventory</h1><div style="font-size:13px;color:var(--text-muted);">Stock levels & ingredient management</div></div>
       <div class="topbar-right">
+        <select class="input" id="periodSelect" onchange="onPeriodChange()" style="padding:7px 12px;font-size:13px;">
+          <option value="all" selected>All Time</option>
+          <option value="1">Today</option>
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="custom">Custom Range...</option>
+        </select>
         <span class="topbar-time" id="topbarTime"></span>
         <button class="btn-logout" onclick="logout()">Sign Out</button>
       </div>
+    </div>
+
+    <!-- Custom date range picker row (hidden by default) -->
+    <div id="customRangeRow" style="display:none;align-items:center;gap:10px;padding:10px 24px 0;flex-wrap:wrap;">
+      <label for="dateFrom" style="font-size:13px;font-weight:600;color:var(--text-muted);">From:</label>
+      <input type="date" id="dateFrom" class="input" style="padding:6px 10px;font-size:13px;width:150px;" />
+      <label for="dateTo" style="font-size:13px;font-weight:600;color:var(--text-muted);">To:</label>
+      <input type="date" id="dateTo" class="input" style="padding:6px 10px;font-size:13px;width:150px;" />
+      <button class="btn" onclick="loadInventory()" style="background:var(--accent,#f5a623);color:#fff;border-radius:99px;padding:7px 18px;font-weight:600;font-size:13px;">Apply</button>
+      <span id="customRangeError" style="color:#e74c3c;font-size:12px;"></span>
     </div>
 
     <div class="content fade-up">
@@ -145,6 +163,47 @@
   let activeModal = null;
   let previousFocus = null;
 
+  // Set default dates for the date pickers (today & 30 days ago)
+  (function initDatePickers() {
+    const today = new Date();
+    const past = new Date();
+    past.setDate(past.getDate() - 29);
+    const fmt = d => d.toISOString().slice(0, 10);
+    document.getElementById('dateTo').value = fmt(today);
+    document.getElementById('dateFrom').value = fmt(past);
+  })();
+
+  function onPeriodChange() {
+    const val = document.getElementById('periodSelect').value;
+    const row = document.getElementById('customRangeRow');
+    row.style.display = val === 'custom' ? 'flex' : 'none';
+    document.getElementById('customRangeError').textContent = '';
+    if (val !== 'custom') loadInventory();
+  }
+
+  function getCustomRange() {
+    const val = document.getElementById('periodSelect').value;
+    if (val === 'all') return null;
+    if (val === 'custom') {
+      const from = document.getElementById('dateFrom').value;
+      const to = document.getElementById('dateTo').value;
+      if (!from || !to) return null;
+      if (from > to) {
+        document.getElementById('customRangeError').textContent = '"From" date must be before or equal to "To" date.';
+        return undefined; // signal validation error
+      }
+      document.getElementById('customRangeError').textContent = '';
+      return { fromDate: from, toDate: to };
+    }
+    // Preset days
+    const days = parseInt(val);
+    const today = new Date();
+    const past = new Date();
+    past.setDate(past.getDate() - (days - 1));
+    const fmt = d => d.toISOString().slice(0, 10);
+    return { fromDate: fmt(past), toDate: fmt(today) };
+  }
+
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   })[char]);
@@ -193,9 +252,11 @@
   document.getElementById('ingUnit').addEventListener('input', updateUnitChips);
 
   async function loadInventory() {
+    const customRange = getCustomRange();
+    if (customRange === undefined) return; // validation error
     const el = document.getElementById('inventoryTable');
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading...</div>';
-    try { inventoryData = await api.getInventory(); }
+    try { inventoryData = await api.getInventory(customRange); }
     catch (error) { el.innerHTML = `<div class="empty-state"><p>${escapeHtml(error.message)}</p></div>`; return; }
     if (!inventoryData?.length) {
       el.innerHTML = '<div class="empty-state"><span class="icon">📦</span><p>No ingredients found</p></div>'; return;
@@ -374,7 +435,7 @@
   // Export a formatted Excel workbook matching the inventory report template.
   function exportExcelCsv() {
     if (!inventoryData.length) return alert('No data to export');
-    InventoryWorkbook.download(inventoryData);
+    InventoryWorkbook.download(inventoryData, getCustomRange());
   }
 
   // Import CSV
