@@ -1,7 +1,7 @@
 // API client for all backend calls
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
   ? 'http://localhost:3000' 
-  : 'https://kanlungan-coffee-api.onrender.com';
+  : window.location.origin;
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
