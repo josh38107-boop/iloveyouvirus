@@ -45,6 +45,14 @@ function deletedCounts(row = {}) {
   };
 }
 
+function duplicateDiagnostics(row = {}) {
+  return {
+    duplicatePayments: Number(row.duplicate_payments || 0),
+    duplicatePaymentAmountCents: Number(row.duplicate_payment_amount_cents || 0),
+    duplicateOrderLines: Number(row.duplicate_order_lines || 0)
+  };
+}
+
 function publicDevice(row, generation) {
   const protocolVersion = Number(row.reset_protocol_version || 0);
   const acknowledgedGeneration = Number(row.acknowledged_reset_generation || 0);
@@ -90,11 +98,36 @@ function createDataMaintenanceService(db, options = {}) {
     return deletedCounts(result.rows[0]);
   }
 
+  async function getDuplicateDiagnostics(client = db) {
+    const result = await client.query(`WITH
+      duplicate_payments AS (
+        SELECT COUNT(*) AS row_count, amount_cents
+        FROM payment
+        GROUP BY order_id, method, COALESCE(payment_category, ''), amount_cents,
+          COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at
+        HAVING COUNT(*) > 1
+      ),
+      duplicate_order_lines AS (
+        SELECT COUNT(*) AS row_count
+        FROM order_line
+        GROUP BY order_id, item_id, name, quantity, unit_price_cents,
+          COALESCE(modifiers::text, ''), COALESCE(notes, ''),
+          COALESCE(discount_category, ''), COALESCE(discount_cents, 0)
+        HAVING COUNT(*) > 1
+      )
+      SELECT
+        COALESCE((SELECT SUM(row_count - 1) FROM duplicate_payments), 0) AS duplicate_payments,
+        COALESCE((SELECT SUM((row_count - 1) * amount_cents) FROM duplicate_payments), 0) AS duplicate_payment_amount_cents,
+        COALESCE((SELECT SUM(row_count - 1) FROM duplicate_order_lines), 0) AS duplicate_order_lines`);
+    return duplicateDiagnostics(result.rows[0]);
+  }
+
   async function getStatus(client = db) {
     const state = await ensureState(client);
     const generation = Number(state.generation || 0);
-    const [counts, devices, stock, campaign] = await Promise.all([
+    const [counts, duplicateSummary, devices, stock, campaign] = await Promise.all([
       countOperationalRows(client),
+      getDuplicateDiagnostics(client),
       client.query(`SELECT id,name,role,status,last_seen_at,reset_protocol_version,
           acknowledged_reset_generation
         FROM sync_device WHERE branch_id=$1 ORDER BY created_at`, [branchId]),
@@ -110,6 +143,7 @@ function createDataMaintenanceService(db, options = {}) {
       resetBy: state.reset_by || null,
       deletedCounts: state.deleted_counts || {},
       counts,
+      duplicateSummary,
       devices: deviceRows,
       allActiveDevicesReady: deviceRows.filter(device => device.status === 'active')
         .every(device => device.ready),
@@ -199,5 +233,6 @@ module.exports = {
   parseGeneration,
   validateResetRequest,
   deletedCounts,
+  duplicateDiagnostics,
   publicDevice
 };

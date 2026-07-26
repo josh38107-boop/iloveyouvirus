@@ -33,6 +33,9 @@ test('Data Maintenance page is accessible, responsive, and explicit about preser
     'aria-live="polite"', '<dialog', 'Final confirmation',
     'Current stock and the Promotion QR destination URL will remain unchanged'
   ]) assert.match(html, new RegExp(marker.replace(/[?()]/g, '\\$&')));
+  assert.match(script, /duplicateSummary/);
+  assert.match(script, /Duplicate payments/);
+  assert.match(script, /Duplicate amount/);
   assert.match(html, /@media\(max-width:700px\)/);
   assert.match(html, /prefers-reduced-motion/);
   assert.match(script, /allActiveDevicesReady/);

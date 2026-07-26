@@ -594,25 +594,60 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
                COALESCE(SUM(subtotal_cents), 0) as gross,
                COALESCE(SUM(total_cents), 0) as net
         FROM pos_order
-        WHERE created_at >= $1 AND created_at < $2 AND status != 'void'
+        WHERE created_at >= $1 AND created_at < $2 AND status = 'paid'
       `, [fromMs, toMs]),
       db.query(`
+        WITH deduped_order_line AS (
+          SELECT DISTINCT ON (
+            order_id, item_id, name, quantity, unit_price_cents,
+            COALESCE(modifiers::text, ''), COALESCE(notes, ''),
+            COALESCE(discount_category, ''), COALESCE(discount_cents, 0)
+          ) *
+          FROM order_line
+          ORDER BY
+            order_id, item_id, name, quantity, unit_price_cents,
+            COALESCE(modifiers::text, ''), COALESCE(notes, ''),
+            COALESCE(discount_category, ''), COALESCE(discount_cents, 0),
+            device_id, id
+        )
         SELECT name, SUM(quantity) as qty,
                COALESCE(SUM(ol.quantity * ol.unit_price_cents - COALESCE(ol.discount_cents, 0)), 0) as revenue
-        FROM order_line ol
+        FROM deduped_order_line ol
         JOIN pos_order o ON o.id = ol.order_id
-        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status != 'void'
+        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
         GROUP BY name ORDER BY qty DESC
       `, [fromMs, toMs]),
       db.query(`
+        WITH deduped_payment AS (
+          SELECT DISTINCT ON (
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at
+          ) *
+          FROM payment
+          ORDER BY
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at,
+            device_id, id
+        )
         SELECT method, payment_category, SUM(amount_cents) as total
-        FROM payment p
+        FROM deduped_payment p
         JOIN pos_order o ON o.id = p.order_id
-        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status != 'void'
+        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
         GROUP BY method, payment_category
         ORDER BY method
       `, [fromMs, toMs]),
       db.query(`
+        WITH deduped_payment AS (
+          SELECT DISTINCT ON (
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at
+          ) *
+          FROM payment
+          ORDER BY
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at,
+            device_id, id
+        )
         SELECT s.id, s.starting_cash_cents, s.ending_cash_cents,
                s.cash_added_cents, s.cash_removed_cents,
                COALESCE(SUM(CASE
@@ -620,8 +655,8 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
                    OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) = 'cash')
                  THEN p.amount_cents ELSE 0 END), 0) as cash_sales
         FROM shift s
-        LEFT JOIN pos_order o ON o.shift_id = s.id AND o.status != 'void'
-        LEFT JOIN payment p ON p.order_id = o.id
+        LEFT JOIN pos_order o ON o.shift_id = s.id AND o.status = 'paid'
+        LEFT JOIN deduped_payment p ON p.order_id = o.id
         WHERE s.opened_at >= $1 AND s.opened_at < $2
         GROUP BY s.id, s.starting_cash_cents, s.ending_cash_cents,
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
@@ -633,7 +668,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
                COUNT(*) AS order_count,
                COALESCE(SUM(discount_cents), 0) AS amount_cents
         FROM pos_order
-        WHERE created_at >= $1 AND created_at < $2 AND status != 'void' AND discount_cents > 0
+        WHERE created_at >= $1 AND created_at < $2 AND status = 'paid' AND discount_cents > 0
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
       `, [fromMs, toMs])
@@ -694,7 +729,7 @@ app.get('/admin/sales', adminAuthenticate, async (req, res) => {
         COUNT(*) as orders,
         COALESCE(SUM(total_cents), 0) as revenue
       FROM pos_order
-      WHERE created_at >= $1 AND created_at < $2 AND status != 'void'
+      WHERE created_at >= $1 AND created_at < $2 AND status = 'paid'
       GROUP BY date ORDER BY date
     `, [fromMs, toMs, cutoffMinutes * 60 * 1000]);
     res.json(result.rows);

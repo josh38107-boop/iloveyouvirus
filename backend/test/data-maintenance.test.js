@@ -7,6 +7,7 @@ const {
   RESET_PROTOCOL_VERSION,
   createDataMaintenanceService,
   validateResetRequest,
+  duplicateDiagnostics,
   publicDevice
 } = require('../data-maintenance');
 
@@ -29,6 +30,16 @@ function createResetDatabase({ devices = [], failOn = '' } = {}) {
             orders: '4', order_lines: '5', payments: '4', receipts: '4', shifts: '2',
             stock_snapshots: '3', order_add_ons: '1', promotion_entries: '4',
             reward_claims: '1', form_submissions: '1'
+          }],
+          rowCount: 1
+        };
+      }
+      if (normalized.startsWith('WITH duplicate_payments AS')) {
+        return {
+          rows: [{
+            duplicate_payments: '3',
+            duplicate_payment_amount_cents: '34100',
+            duplicate_order_lines: '5'
           }],
           rowCount: 1
         };
@@ -103,6 +114,18 @@ test('device readiness requires protocol support and the current generation', ()
   assert.equal(publicDevice({ ...ready, status: 'revoked' }, 3).ready, true);
 });
 
+test('duplicate diagnostics normalize database aggregate rows for the dashboard', () => {
+  assert.deepEqual(duplicateDiagnostics({
+    duplicate_payments: '3',
+    duplicate_payment_amount_cents: '34100',
+    duplicate_order_lines: '5'
+  }), {
+    duplicatePayments: 3,
+    duplicatePaymentAmountCents: 34100,
+    duplicateOrderLines: 5
+  });
+});
+
 test('reset is one transaction, records an audit, and preserves stock/configuration', async () => {
   const db = createResetDatabase({
     devices: [{
@@ -124,6 +147,11 @@ test('reset is one transaction, records an audit, and preserves stock/configurat
   assert.ok(sql.some(query => query.startsWith('DELETE FROM sync_change')));
   assert.ok(sql.some(query => query.startsWith('INSERT INTO operational_reset_audit')));
   assert.equal(result.generation, 1);
+  assert.deepEqual(result.duplicateSummary, {
+    duplicatePayments: 3,
+    duplicatePaymentAmountCents: 34100,
+    duplicateOrderLines: 5
+  });
   assert.deepEqual(result.counts, {
     orders: 4, orderLines: 5, payments: 4, receipts: 4, shifts: 2,
     stockSnapshots: 3, orderAddOns: 1, promotionEntries: 4,

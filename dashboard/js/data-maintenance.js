@@ -35,15 +35,19 @@ function updateResetButton() {
 }
 
 function renderCounts(counts) {
+  const duplicateSummary = maintenanceState?.duplicateSummary || {};
   const values = [
     ['Orders', counts.orders],
     ['Payments', counts.payments],
     ['Receipts', counts.receipts],
     ['Shifts', counts.shifts],
-    ['Reward claims', counts.rewardClaims]
+    ['Reward claims', counts.rewardClaims],
+    ['Duplicate payments', duplicateSummary.duplicatePayments],
+    ['Duplicate lines', duplicateSummary.duplicateOrderLines],
+    ['Duplicate amount', formatPeso(duplicateSummary.duplicatePaymentAmountCents || 0)]
   ];
   countGrid.innerHTML = values.map(([label, value]) =>
-    `<div class="count-card"><span class="count-label">${escapeHtml(label)}</span><span class="count-value">${Number(value || 0).toLocaleString()}</span></div>`
+    `<div class="count-card"><span class="count-label">${escapeHtml(label)}</span><span class="count-value">${typeof value === 'string' ? escapeHtml(value) : Number(value || 0).toLocaleString()}</span></div>`
   ).join('');
 }
 
