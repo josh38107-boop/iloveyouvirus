@@ -1,0 +1,16 @@
+{
+  "name": "kanlungan-coffee-garage",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend"
+  ],
+  "scripts": {
+    "start": "npm --workspace backend run start",
+    "migrate": "npm --workspace backend run migrate",
+    "test": "npm --workspace backend test"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
