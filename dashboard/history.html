@@ -135,6 +135,17 @@
   let currentCatFilter = 'all';
   let allHappenings = [];
 
+  function addDaysToLabel(label, offsetDays) {
+    const [y, m, d] = String(label).split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d + offsetDays));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  async function currentBusinessDateLabel() {
+    const settings = await api.getBusinessDaySettings();
+    return settings?.currentBusinessDate || new Date().toISOString().slice(0, 10);
+  }
+
   function escapeHtml(val) {
     return String(val ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   }
@@ -146,11 +157,9 @@
       customInput.style.display = 'block';
       // Set default to today if empty
       if (!customInput.value) {
-        const now = new Date();
-        const y = now.getFullYear();
-        const m = String(now.getMonth() + 1).padStart(2, '0');
-        const d = String(now.getDate()).padStart(2, '0');
-        customInput.value = `${y}-${m}-${d}`;
+        currentBusinessDateLabel().then(label => { customInput.value = label; }).catch(() => {
+          customInput.value = new Date().toISOString().slice(0, 10);
+        });
       }
     } else {
       customInput.style.display = 'none';
@@ -171,25 +180,18 @@
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading happenings...</div>';
 
     let start = null, end = null;
-    const now = new Date();
 
     if (currentFilter === 'today') {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      start = d.toISOString();
-      const d2 = new Date(d.getTime() + 86400000);
-      end = d2.toISOString();
+      start = await currentBusinessDateLabel();
+      end = start;
     } else if (currentFilter === 'yesterday') {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
-      start = d.toISOString();
-      const d2 = new Date(d.getTime() + 86400000);
-      end = d2.toISOString();
+      start = addDaysToLabel(await currentBusinessDateLabel(), -1);
+      end = start;
     } else if (currentFilter === 'custom') {
       const val = document.getElementById('customDateInput').value;
       if (val) {
-        const [y, m, d] = val.split('-').map(Number);
-        const picked = new Date(y, m - 1, d, 0, 0, 0, 0);
-        start = picked.toISOString();
-        end = new Date(picked.getTime() + 86400000).toISOString();
+        start = val;
+        end = val;
       }
     }
     // 'all' leaves start/end as null → no filter applied

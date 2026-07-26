@@ -22,7 +22,7 @@ const TABLES = {
   payment_method: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'enabled', 'is_system', 'payment_category', 'created_at', 'updated_at'] },
   discount_rule: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'percent', 'scope', 'requires_reference', 'active', 'sort_order', 'created_at', 'updated_at'] },
   employee: { role: 'manager', keys: ['id'], columns: ['id', 'name', 'pin', 'role', 'active'] },
-  store_settings: { role: 'manager', keys: ['id'], columns: ['id', 'store_name', 'tax_rate_percent', 'tip_presets', 'receipt_footer', 'senior_discount_percent', 'pwd_discount_percent', 'discount_settings_updated_at', 'void_refund_pin', 'payment_void_settings_updated_at'] },
+  store_settings: { role: 'manager', keys: ['id'], columns: ['id', 'store_name', 'tax_rate_percent', 'tip_presets', 'receipt_footer', 'senior_discount_percent', 'pwd_discount_percent', 'discount_settings_updated_at', 'void_refund_pin', 'payment_void_settings_updated_at', 'business_day_cutoff_minutes', 'business_day_settings_updated_at'] },
   sync_device_authority: { role: 'manager', keys: ['branch_id'], columns: ['branch_id', 'manager_device_id', 'manager_device_name', 'revision', 'updated_at'] },
   sync_tombstone: { role: 'manager', keys: ['branch_id', 'entity_type', 'entity_id'], columns: ['branch_id', 'entity_type', 'entity_id', 'deleted_by_device', 'deleted_at'] },
   shift: { role: 'counter', keys: ['device_id', 'id'], columns: ['device_id', 'id', 'employee_id', 'opened_at', 'closed_at', 'starting_cash_cents', 'ending_cash_cents', 'cash_added_cents', 'cash_removed_cents'] },
@@ -468,7 +468,7 @@ function createCloud(db) {
             }
             const operationData = entity === 'store_settings'
               ? Object.fromEntries(Object.entries(operation.data || {}).filter(([key]) =>
-                  !['void_refund_pin', 'payment_void_settings_updated_at'].includes(key)))
+                  !['void_refund_pin', 'payment_void_settings_updated_at', 'business_day_cutoff_minutes', 'business_day_settings_updated_at'].includes(key)))
               : operation.data;
             const candidateId = config.keys.map(key => operation.data?.[key]).join('|');
             const tombstone = config.role === 'manager' && entity !== 'sync_tombstone'

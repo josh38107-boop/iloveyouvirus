@@ -29,6 +29,8 @@ import com.kape.coffeepos.data.PaymentCategories
 import com.kape.coffeepos.data.PromotionClaim
 import com.kape.coffeepos.data.PromotionConfig
 import com.kape.coffeepos.data.PromotionResult
+import com.kape.coffeepos.data.businessDayWindow
+import com.kape.coffeepos.data.minutesUntilBusinessDayCutoff
 import com.kape.coffeepos.data.calculateSingleItemDiscountCents
 import com.kape.coffeepos.data.calculateWholeOrderDiscountCents
 import com.kape.coffeepos.data.customReportRangeError
@@ -43,6 +45,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -139,6 +142,8 @@ data class PosUiState(
     val catalog: MenuCatalog = MenuCatalog(),
     val employee: Employee? = null,
     val activeShift: Shift? = null,
+    val activeShiftRequiresRollover: Boolean = false,
+    val cutoffWarningMessage: String? = null,
     val screen: AppScreen = AppScreen.POS,
     val selectedCategoryId: String = "espresso",
     val cart: List<CartLine> = emptyList(),
@@ -338,6 +343,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
     private var activeShiftSalesJob: kotlinx.coroutines.Job? = null
     private var activeShiftGCashSalesJob: kotlinx.coroutines.Job? = null
     private var activeShiftAdjustmentsJob: kotlinx.coroutines.Job? = null
+    private var businessDayMonitorJob: kotlinx.coroutines.Job? = null
 
     val canEditSharedConfiguration: Boolean
         get() = _uiState.value.isManager && container.supabaseSyncManager.isManagerTablet
@@ -439,11 +445,44 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             .toSet()
     }
 
+    private fun refreshBusinessDayStatus() {
+        val state = _uiState.value
+        val shift = state.activeShift
+        if (shift == null) {
+            _uiState.update {
+                it.copy(activeShiftRequiresRollover = false, cutoffWarningMessage = null)
+            }
+            return
+        }
+        val cutoffMinutes = state.settings.businessDayCutoffMinutes
+        val window = businessDayWindow(cutoffMinutes = cutoffMinutes)
+        val requiresRollover = shift.openedAt < window.startMs || shift.openedAt >= window.endMs
+        val minutesLeft = minutesUntilBusinessDayCutoff(cutoffMinutes = cutoffMinutes)
+        val warning = when {
+            requiresRollover && container.supabaseSyncManager.isManagerTablet ->
+                "Business day ended. Count the drawer and close Shift #${shift.id}, then open the new shift."
+            requiresRollover ->
+                "Business day ended--ask the manager to close the shift, then Sync Now."
+            minutesLeft in 1..15 ->
+                "Business day ends in $minutesLeft minute${if (minutesLeft == 1L) "" else "s"}. Prepare for drawer count."
+            else -> null
+        }
+        _uiState.update {
+            it.copy(activeShiftRequiresRollover = requiresRollover, cutoffWarningMessage = warning)
+        }
+    }
+
     init {
         viewModelScope.launch {
             container.seedData.ensureSeeded()
             container.shiftRepository.recoverLocalActiveShiftIfNeeded()
             container.shiftRepository.ensureTodayShift()
+        }
+        businessDayMonitorJob = viewModelScope.launch {
+            while (true) {
+                refreshBusinessDayStatus()
+                delay(30_000L)
+            }
         }
         viewModelScope.launch {
             container.menuRepository.catalog.collect { catalog ->
@@ -453,6 +492,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             container.shiftRepository.activeShift.collect { shift ->
                 _uiState.update { it.copy(activeShift = shift) }
+                refreshBusinessDayStatus()
                 activeShiftSalesJob?.cancel()
                 activeShiftGCashSalesJob?.cancel()
                 activeShiftAdjustmentsJob?.cancel()
@@ -549,6 +589,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     }
                 }
             }
+            refreshBusinessDayStatus()
         }
         changeReportDateRange(ReportDateRange.TODAY)
         refreshPrinterDevices()
@@ -1420,10 +1461,14 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun showOrderSummary() {
+        refreshBusinessDayStatus()
         val state = _uiState.value
         when {
             state.employee == null -> _uiState.update { it.copy(statusMessage = "Sign in before checkout.") }
             state.cart.isEmpty() -> _uiState.update { it.copy(statusMessage = "Cart is empty.") }
+            state.activeShiftRequiresRollover -> _uiState.update {
+                it.copy(statusMessage = state.cutoffWarningMessage ?: "Business day ended. Close the old shift before checkout.")
+            }
             else -> _uiState.update {
                 it.copy(
                     showOrderSummary = true,
@@ -1625,6 +1670,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun checkoutSplit(cashPaidCents: Int, gcashPaidCents: Int) {
         viewModelScope.launch {
+            refreshBusinessDayStatus()
             val state = _uiState.value
             val employee = state.employee
             val shift = state.activeShift
@@ -1632,6 +1678,9 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             when {
                 employee == null -> _uiState.update { it.copy(statusMessage = "Sign in before checkout.") }
                 shift == null -> _uiState.update { it.copy(statusMessage = "No active shift. Please open a shift before checking out.") }
+                state.activeShiftRequiresRollover -> _uiState.update {
+                    it.copy(paymentError = state.cutoffWarningMessage ?: "Business day ended. Close the old shift before checkout.")
+                }
                 state.cart.isEmpty() -> _uiState.update { it.copy(statusMessage = "Cart is empty.") }
                 state.selectedDiscountRequiresReference && state.seniorPwdIdInput.isBlank() ->
                     _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountName} ID or reference number.") }
@@ -1642,19 +1691,27 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 else -> {
                     val profile = container.printerManager.printerProfile
                     val lineChars = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
-                    val order = container.orderRepository.checkoutSplit(
-                        employee = employee,
-                        shift = shift,
-                        lines = state.cart,
-                        itemDiscount = currentItemDiscount(state),
-                        tipCents = state.tipCents,
-                        cashAmountCents = cashPaidCents,
-                        gcashAmountCents = gcashPaidCents,
-                        customerName = state.customerNameInput,
-                        tableNumber = state.tableNumberInput,
-                        orderType = state.orderTypeInput,
-                        lineCharacters = lineChars
-                    )
+                    val order = runCatching {
+                        container.orderRepository.checkoutSplit(
+                            employee = employee,
+                            shift = shift,
+                            lines = state.cart,
+                            itemDiscount = currentItemDiscount(state),
+                            tipCents = state.tipCents,
+                            cashAmountCents = cashPaidCents,
+                            gcashAmountCents = gcashPaidCents,
+                            customerName = state.customerNameInput,
+                            tableNumber = state.tableNumberInput,
+                            orderType = state.orderTypeInput,
+                            lineCharacters = lineChars
+                        )
+                    }.getOrElse { error ->
+                        refreshBusinessDayStatus()
+                        _uiState.update {
+                            it.copy(paymentError = error.localizedMessage ?: "Checkout failed. Try again.")
+                        }
+                        return@launch
+                    }
                     val receipt = container.orderRepository.receipt(order.id)
                     val receiptText = receipt?.text
                     _uiState.update {
@@ -2063,6 +2120,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun checkout(paymentMethod: String, amountTenderedCents: Int) {
         viewModelScope.launch {
+            refreshBusinessDayStatus()
             val state = _uiState.value
             val employee = state.employee
             val shift = state.activeShift
@@ -2071,6 +2129,9 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 employee == null -> _uiState.update { it.copy(statusMessage = "Sign in before checkout.") }
                 shift == null -> {
                     _uiState.update { it.copy(statusMessage = "No active shift. Please open a shift before checking out.") }
+                }
+                state.activeShiftRequiresRollover -> _uiState.update {
+                    it.copy(paymentError = state.cutoffWarningMessage ?: "Business day ended. Close the old shift before checkout.")
                 }
                 state.cart.isEmpty() -> _uiState.update { it.copy(statusMessage = "Cart is empty.") }
                 state.selectedDiscountRequiresReference && state.seniorPwdIdInput.isBlank() ->
@@ -2082,23 +2143,31 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 else -> {
                     val profile = container.printerManager.printerProfile
                     val lineChars = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
-                    val order = container.orderRepository.checkout(
-                        employee = employee,
-                        shift = shift,
-                        lines = state.cart,
-                        itemDiscount = currentItemDiscount(state),
-                        tipCents = state.tipCents,
-                        paymentMethod = paymentMethod,
-                        paymentCategory = state.paymentMethods
-                            .firstOrNull { it.name == paymentMethod }
-                            ?.paymentCategory
-                            ?: PaymentCategories.fromLegacyMethod(paymentMethod),
-                        amountTenderedCents = amountTenderedCents,
-                        customerName = state.customerNameInput,
-                        tableNumber = state.tableNumberInput,
-                        orderType = state.orderTypeInput,
-                        lineCharacters = lineChars
-                    )
+                    val order = runCatching {
+                        container.orderRepository.checkout(
+                            employee = employee,
+                            shift = shift,
+                            lines = state.cart,
+                            itemDiscount = currentItemDiscount(state),
+                            tipCents = state.tipCents,
+                            paymentMethod = paymentMethod,
+                            paymentCategory = state.paymentMethods
+                                .firstOrNull { it.name == paymentMethod }
+                                ?.paymentCategory
+                                ?: PaymentCategories.fromLegacyMethod(paymentMethod),
+                            amountTenderedCents = amountTenderedCents,
+                            customerName = state.customerNameInput,
+                            tableNumber = state.tableNumberInput,
+                            orderType = state.orderTypeInput,
+                            lineCharacters = lineChars
+                        )
+                    }.getOrElse { error ->
+                        refreshBusinessDayStatus()
+                        _uiState.update {
+                            it.copy(paymentError = error.localizedMessage ?: "Checkout failed. Try again.")
+                        }
+                        return@launch
+                    }
                     val receipt = container.orderRepository.receipt(order.id)
                     val receiptText = receipt?.text
                     _uiState.update {
@@ -2203,7 +2272,14 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             }
             val startingCashDouble = state.startingCashInput.toDoubleOrNull() ?: 150.00
             val startingCashCents = (startingCashDouble * 100).roundToInt()
-            val result = container.shiftRepository.openShift(employeeId = employee.id, startingCashCents = startingCashCents)
+            val result = runCatching {
+                container.shiftRepository.openShift(employeeId = employee.id, startingCashCents = startingCashCents)
+            }.getOrElse { error ->
+                _uiState.update {
+                    it.copy(statusMessage = error.localizedMessage ?: "Close the old shift before opening a new one.")
+                }
+                return@launch
+            }
             _uiState.update {
                 it.copy(
                     statusMessage = String.format("Shift opened with float ₱%,.2f.", startingCashCents / 100.0),
@@ -2872,7 +2948,12 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 .takeIf { category.startsWith("RULE:") }
                 ?.let { id -> state.discountRules.firstOrNull { it.id == id && it.active } }
             val resolvedPercent = customRule?.percent ?: cleanPct
-            val selectedLineId = if (category == "None" || customRule?.scope == "order") null else state.selectedDiscountLineId
+            val validExistingLineId = state.selectedDiscountLineId?.takeIf { id -> state.cart.any { it.id == id } }
+            val selectedLineId = if (category == "None" || customRule?.scope == "order") {
+                null
+            } else {
+                validExistingLineId ?: if (state.cart.size == 1) state.cart.firstOrNull()?.id else null
+            }
             val discountCents = if (customRule?.scope == "order") {
                 calculateWholeOrderDiscountCents(state.cart, resolvedPercent)
             } else {
@@ -4262,27 +4343,12 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             val now = System.currentTimeMillis()
             val (startTime, endTime) = when (targetFilter) {
                 HistoryDateFilter.TODAY -> {
-                    val cal = java.util.Calendar.getInstance()
-                    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                    cal.set(java.util.Calendar.MINUTE, 0)
-                    cal.set(java.util.Calendar.SECOND, 0)
-                    cal.set(java.util.Calendar.MILLISECOND, 0)
-                    val start = cal.timeInMillis
-                    cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
-                    val end = cal.timeInMillis - 1
-                    Pair(start, end)
+                    val window = businessDayWindow(now, _uiState.value.settings.businessDayCutoffMinutes)
+                    Pair(window.startMs, window.endMs)
                 }
                 HistoryDateFilter.YESTERDAY -> {
-                    val cal = java.util.Calendar.getInstance()
-                    cal.add(java.util.Calendar.DAY_OF_MONTH, -1)
-                    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                    cal.set(java.util.Calendar.MINUTE, 0)
-                    cal.set(java.util.Calendar.SECOND, 0)
-                    cal.set(java.util.Calendar.MILLISECOND, 0)
-                    val start = cal.timeInMillis
-                    cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
-                    val end = cal.timeInMillis - 1
-                    Pair(start, end)
+                    val window = businessDayWindow(now, _uiState.value.settings.businessDayCutoffMinutes)
+                    Pair(window.startMs - 24L * 60L * 60L * 1000L, window.startMs)
                 }
                 HistoryDateFilter.ALL -> Pair(0L, now + 86400000L)
             }

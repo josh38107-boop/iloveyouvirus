@@ -38,10 +38,10 @@ class CoffeePosApplication : Application() {
             menuRepository = MenuRepository(db.menuDao(), pendingDeleteDao),
             inventoryRepository = inventoryRepository,
             employeeRepository = EmployeeRepository(db.employeeDao()),
-            shiftRepository = ShiftRepository(db.shiftDao(), db.stockSnapshotDao(), db.inventoryDao(), this),
+            shiftRepository = ShiftRepository(db.shiftDao(), db.stockSnapshotDao(), db.inventoryDao(), settingsRepository, this),
             settingsRepository = settingsRepository,
             orderRepository = orderRepository,
-            reportsRepository = ReportsRepository(orderRepository, inventoryRepository, db.orderDao(), db.employeeDao()),
+            reportsRepository = ReportsRepository(orderRepository, inventoryRepository, db.orderDao(), db.employeeDao(), settingsRepository),
             auditLogRepository = auditLogRepository,
             printerManager = BluetoothPrinterManager(this),
             supabaseSyncManager = syncManager
@@ -65,4 +65,3 @@ data class AppContainer(
     val printerManager: BluetoothPrinterManager,
     val supabaseSyncManager: SupabaseSyncManager
 )
-

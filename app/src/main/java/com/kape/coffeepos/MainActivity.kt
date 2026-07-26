@@ -996,6 +996,26 @@ private fun CartPanel(state: PosUiState, viewModel: PosViewModel, modifier: Modi
                     }
                 }
             }
+            if (state.cutoffWarningMessage != null) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (state.activeShiftRequiresRollover) Color(0xFFFFEBEE) else Color(0xFFFFF8E1)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (state.activeShiftRequiresRollover) Color(0xFFC62828) else Color(0xFFC9A227)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        state.cutoffWarningMessage,
+                        modifier = Modifier.padding(12.dp),
+                        color = if (state.activeShiftRequiresRollover) Color(0xFFC62828) else Color(0xFF6D5600),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
             TotalsBlock(state)
             OutlinedButton(
                 onClick = viewModel::holdCart,
@@ -1014,7 +1034,7 @@ private fun CartPanel(state: PosUiState, viewModel: PosViewModel, modifier: Modi
                 }
                 Button(
                     onClick = viewModel::showOrderSummary,
-                    enabled = state.cart.isNotEmpty(),
+                    enabled = state.cart.isNotEmpty() && !state.activeShiftRequiresRollover,
                     modifier = Modifier.weight(1f).height(48.dp)
                 ) {
                     Text("Confirm")
@@ -1319,7 +1339,7 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                                             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            RadioButton(selected = selected, onClick = null)
+                                            RadioButton(selected = selected, onClick = null) // Card's clickable handles the tap to avoid double-fire
                                             Column(Modifier.weight(1f)) {
                                                 Text(
                                                     if (line.quantity > 1) "1 of ${line.quantity} × ${line.item.name}"
@@ -2960,7 +2980,7 @@ private fun ReportsScreen(state: PosUiState, viewModel: PosViewModel) {
             MetricCard("Gross Sales", money(report.grossSalesCents), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard("Avg. Order Value", money(report.avgOrderValueCents), Modifier.weight(1f))
+            MetricCard("Net Revenue", money(report.netSalesCents), Modifier.weight(1f))
             MetricCard("Methods", report.paymentTotals.size.toString(), Modifier.weight(1f))
         }
 

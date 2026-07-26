@@ -48,6 +48,54 @@ const RESET_GUARDED_RPCS = new Set([
   'release_promotion_claim', 'finalize_promotion_claim', 'mark_promotion_printed'
 ]);
 
+const MANILA_TIME_ZONE = 'Asia/Manila';
+const DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES = 120;
+
+function normalizeCutoffMinutes(value) {
+  const minutes = Number(value);
+  return Number.isInteger(minutes) && minutes >= 0 && minutes <= 1439
+    ? minutes
+    : DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES;
+}
+
+function manilaDateLabel(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: MANILA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function windowForBusinessDate(dateLabel, cutoffMinutes) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateLabel || ''))) return null;
+  const cutoff = normalizeCutoffMinutes(cutoffMinutes);
+  const hours = String(Math.floor(cutoff / 60)).padStart(2, '0');
+  const minutes = String(cutoff % 60).padStart(2, '0');
+  const start = new Date(`${dateLabel}T${hours}:${minutes}:00+08:00`);
+  if (Number.isNaN(start.getTime())) return null;
+  return { startMs: start.getTime(), endMs: start.getTime() + 24 * 60 * 60 * 1000 };
+}
+
+function currentBusinessDayWindow(cutoffMinutes, nowMs = Date.now()) {
+  const today = manilaDateLabel(new Date(nowMs));
+  let window = windowForBusinessDate(today, cutoffMinutes);
+  if (nowMs < window.startMs) {
+    window = windowForBusinessDate(manilaDateLabel(new Date(window.startMs - 1)), cutoffMinutes);
+  }
+  return { businessDate: manilaDateLabel(new Date(window.startMs)), ...window };
+}
+
+async function getBusinessDayCutoffMinutes() {
+  const result = await db.query(`SELECT business_day_cutoff_minutes
+    FROM store_settings WHERE id='store' LIMIT 1`);
+  return normalizeCutoffMinutes(result.rows[0]?.business_day_cutoff_minutes);
+}
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.set('trust proxy', 1);
 
@@ -351,6 +399,8 @@ app.all('/rest/v1/:table', authenticate, guardLegacyOperationalWrite, async (req
       const cleaned = { ...row };
       delete cleaned.void_refund_pin;
       delete cleaned.payment_void_settings_updated_at;
+      delete cleaned.business_day_cutoff_minutes;
+      delete cleaned.business_day_settings_updated_at;
       return cleaned;
     };
     req.body = Array.isArray(req.body) ? req.body.map(stripWebsiteFields) : stripWebsiteFields(req.body || {});
@@ -423,21 +473,25 @@ app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, guardOperationalRpc, (req, res, n
 
 // ─── Admin Dashboard API routes ───────────────────────────────────────────────
 
-function reportRange(daysParam, fromDate, toDate) {
+async function reportRange(daysParam, fromDate, toDate) {
+  const cutoffMinutes = await getBusinessDayCutoffMinutes();
   // Custom range: fromDate and toDate are ISO date strings (YYYY-MM-DD)
   if (fromDate && toDate) {
-    const from = new Date(fromDate + 'T00:00:00+08:00');
-    const to = new Date(toDate + 'T23:59:59+08:00');
-    if (!isNaN(from) && !isNaN(to) && from <= to) {
-      return { days: null, fromMs: from.getTime(), toMs: to.getTime() };
+    const from = windowForBusinessDate(fromDate, cutoffMinutes);
+    const to = windowForBusinessDate(toDate, cutoffMinutes);
+    if (from && to && from.startMs <= to.startMs) {
+      return { days: null, fromMs: from.startMs, toMs: to.endMs, cutoffMinutes };
     }
   }
   const parsed = parseInt(daysParam, 10);
   const days = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), 365);
-  const from = new Date();
-  from.setHours(0, 0, 0, 0);
-  from.setDate(from.getDate() - (days - 1));
-  return { days, fromMs: from.getTime(), toMs: Date.now() };
+  const current = currentBusinessDayWindow(cutoffMinutes);
+  return {
+    days,
+    fromMs: current.startMs - (days - 1) * 24 * 60 * 60 * 1000,
+    toMs: Date.now(),
+    cutoffMinutes
+  };
 }
 
 function paymentCategory(row) {
@@ -449,31 +503,112 @@ function paymentCategory(row) {
   return '';
 }
 
+app.get('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
+  try {
+    const settingsRes = await db.query(`SELECT id, business_day_cutoff_minutes, business_day_settings_updated_at
+      FROM store_settings WHERE id='store' LIMIT 1`);
+    const settings = settingsRes.rows[0] || {
+      id: 'store',
+      business_day_cutoff_minutes: DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES,
+      business_day_settings_updated_at: 0
+    };
+    const cutoffMinutes = normalizeCutoffMinutes(settings.business_day_cutoff_minutes);
+    const window = currentBusinessDayWindow(cutoffMinutes);
+    const openShiftsRes = await db.query(`
+      SELECT device_id, id, employee_id, opened_at, starting_cash_cents, cash_added_cents, cash_removed_cents
+      FROM shift
+      WHERE closed_at IS NULL
+      ORDER BY opened_at DESC
+    `);
+    res.json({
+      timezone: MANILA_TIME_ZONE,
+      cutoffMinutes,
+      updatedAt: Number(settings.business_day_settings_updated_at || 0),
+      currentBusinessDate: window.businessDate,
+      currentWindow: { startMs: window.startMs, endMs: window.endMs },
+      openShifts: openShiftsRes.rows
+    });
+  } catch (err) {
+    console.error('GET /admin/business-day-settings:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
+  let client;
+  try {
+    const cutoffMinutes = Number(req.body?.cutoffMinutes);
+    if (!Number.isInteger(cutoffMinutes) || cutoffMinutes < 0 || cutoffMinutes > 1439) {
+      return res.status(400).json({ error: 'cutoffMinutes must be an integer from 0 through 1439.' });
+    }
+    client = await db.pool.connect();
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO store_settings(id, store_name, tax_rate_percent, tip_presets, receipt_footer)
+      VALUES ('store', 'Kanlungan Coffee Garage', 0, '{}', '')
+      ON CONFLICT (id) DO NOTHING`);
+    const current = await client.query(`SELECT * FROM store_settings WHERE id='store' FOR UPDATE`);
+    const currentCutoff = normalizeCutoffMinutes(current.rows[0]?.business_day_cutoff_minutes);
+    const openShifts = await client.query('SELECT device_id, id, opened_at FROM shift WHERE closed_at IS NULL');
+    if (cutoffMinutes !== currentCutoff && openShifts.rowCount > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Close and sync every open shift before changing the business-day cutoff.',
+        openShifts: openShifts.rows
+      });
+    }
+    const updatedAt = cutoffMinutes === currentCutoff
+      ? Number(current.rows[0]?.business_day_settings_updated_at || 0)
+      : Date.now();
+    const updated = await client.query(`UPDATE store_settings
+      SET business_day_cutoff_minutes=$1, business_day_settings_updated_at=$2
+      WHERE id='store' RETURNING *`, [cutoffMinutes, updatedAt]);
+    await client.query(`INSERT INTO sync_change(branch_id, entity_type, entity_id, operation, payload, device_id, created_at)
+      VALUES ($1, 'store_settings', 'store', 'upsert', $2, NULL, $3)`,
+      [process.env.DEFAULT_BRANCH_ID || 'main', updated.rows[0], Date.now()]);
+    await client.query('COMMIT');
+    const window = currentBusinessDayWindow(cutoffMinutes);
+    res.json({
+      timezone: MANILA_TIME_ZONE,
+      cutoffMinutes,
+      updatedAt,
+      currentBusinessDate: window.businessDate,
+      currentWindow: { startMs: window.startMs, endMs: window.endMs },
+      openShifts: []
+    });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    console.error('PUT /admin/business-day-settings:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 // GET /admin/stats?days=1&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — report summary
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
-    const { days, fromMs, toMs } = reportRange(req.query.days, req.query.fromDate, req.query.toDate);
+    const { days, fromMs, toMs } = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
     const [summaryRes, topItemsRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
                COALESCE(SUM(total_cents), 0) as net
         FROM pos_order
-        WHERE created_at >= $1 AND created_at <= $2 AND status != 'void'
+        WHERE created_at >= $1 AND created_at < $2 AND status != 'void'
       `, [fromMs, toMs]),
       db.query(`
         SELECT name, SUM(quantity) as qty,
                COALESCE(SUM(ol.quantity * ol.unit_price_cents - COALESCE(ol.discount_cents, 0)), 0) as revenue
         FROM order_line ol
         JOIN pos_order o ON o.id = ol.order_id
-        WHERE o.created_at >= $1 AND o.created_at <= $2 AND o.status != 'void'
+        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status != 'void'
         GROUP BY name ORDER BY qty DESC
       `, [fromMs, toMs]),
       db.query(`
         SELECT method, payment_category, SUM(amount_cents) as total
         FROM payment p
         JOIN pos_order o ON o.id = p.order_id
-        WHERE o.created_at >= $1 AND o.created_at <= $2 AND o.status != 'void'
+        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status != 'void'
         GROUP BY method, payment_category
         ORDER BY method
       `, [fromMs, toMs]),
@@ -487,7 +622,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM shift s
         LEFT JOIN pos_order o ON o.shift_id = s.id AND o.status != 'void'
         LEFT JOIN payment p ON p.order_id = o.id
-        WHERE s.opened_at >= $1 AND s.opened_at <= $2
+        WHERE s.opened_at >= $1 AND s.opened_at < $2
         GROUP BY s.id, s.starting_cash_cents, s.ending_cash_cents,
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
         ORDER BY s.opened_at
@@ -498,7 +633,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
                COUNT(*) AS order_count,
                COALESCE(SUM(discount_cents), 0) AS amount_cents
         FROM pos_order
-        WHERE created_at >= $1 AND created_at <= $2 AND status != 'void' AND discount_cents > 0
+        WHERE created_at >= $1 AND created_at < $2 AND status != 'void' AND discount_cents > 0
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
       `, [fromMs, toMs])
@@ -552,16 +687,16 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
 // GET /admin/sales?days=7&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — sales chart data
 app.get('/admin/sales', adminAuthenticate, async (req, res) => {
   try {
-    const { fromMs, toMs } = reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
+    const { fromMs, toMs, cutoffMinutes } = await reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
     const result = await db.query(`
       SELECT
-        TO_CHAR(TO_TIMESTAMP(created_at / 1000), 'YYYY-MM-DD') as date,
+        TO_CHAR(TO_TIMESTAMP((created_at - $3) / 1000) AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') as date,
         COUNT(*) as orders,
         COALESCE(SUM(total_cents), 0) as revenue
       FROM pos_order
-      WHERE created_at >= $1 AND created_at <= $2 AND status != 'void'
+      WHERE created_at >= $1 AND created_at < $2 AND status != 'void'
       GROUP BY date ORDER BY date
-    `, [fromMs, toMs]);
+    `, [fromMs, toMs, cutoffMinutes * 60 * 1000]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -591,11 +726,8 @@ app.get('/admin/inventory', adminAuthenticate, async (req, res) => {
   try {
     let dateRange = null;
     if (req.query.fromDate && req.query.toDate) {
-      const from = new Date(req.query.fromDate + 'T00:00:00+08:00');
-      const to = new Date(req.query.toDate + 'T23:59:59+08:00');
-      if (!isNaN(from) && !isNaN(to) && from <= to) {
-        dateRange = { fromMs: from.getTime(), toMs: to.getTime() };
-      }
+      const range = await reportRange(null, req.query.fromDate, req.query.toDate);
+      dateRange = { fromMs: range.fromMs, toMs: range.toMs };
     }
     res.json(await inventory.list(dateRange));
   } catch (err) {
@@ -790,11 +922,16 @@ app.delete('/admin/employees/:id', adminAuthenticate, async (req, res) => {
 // ─── Happenings / Audit History Endpoint ──────────────────────────────────────
 async function handleGetHappenings(req, res) {
   try {
-    const { start, end } = req.query;
+    const { start, end, fromDate, toDate } = req.query;
 
     // All timestamp columns here are bigint (epoch ms)
-    const startMs = start ? new Date(start).getTime() : null;
-    const endMs   = end   ? new Date(end).getTime()   : null;
+    let startMs = start ? new Date(start).getTime() : null;
+    let endMs   = end   ? new Date(end).getTime()   : null;
+    if (fromDate && toDate) {
+      const range = await reportRange(null, fromDate, toDate);
+      startMs = range.fromMs;
+      endMs = range.toMs;
+    }
 
     // --- inventory: pull from sync_inventory_event (where stock changes are actually recorded)
     // Only show manual restocks/adjustments — exclude "Order sale:" deductions

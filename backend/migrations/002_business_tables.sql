@@ -84,7 +84,9 @@ CREATE TABLE IF NOT EXISTS store_settings (
   receipt_footer TEXT DEFAULT '',
   senior_discount_percent DOUBLE PRECISION NOT NULL DEFAULT 20,
   pwd_discount_percent DOUBLE PRECISION NOT NULL DEFAULT 20,
-  void_refund_pin TEXT DEFAULT ''
+  void_refund_pin TEXT DEFAULT '',
+  business_day_cutoff_minutes INTEGER NOT NULL DEFAULT 120,
+  business_day_settings_updated_at BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sync_device_authority (

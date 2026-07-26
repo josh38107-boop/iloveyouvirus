@@ -46,7 +46,9 @@ Use this workflow when multiple tablets share one cash drawer.
 3. Each device should sync so it sees the active shift and the same orders.
 4. Cashiers sell normally from their own devices.
 5. Cash sales, online sales, add cash, remove cash, voids, and refunds are included in the cash drawer summary.
-6. At the end of the day, the manager counts the physical drawer and closes the shift.
+6. At 1:45 AM, staff should prepare for business-day cutoff and drawer count.
+7. At 2:00 AM, checkout stops until the manager counts the physical drawer and closes the old shift.
+8. After the old shift is closed, every tablet should use Sync Now, then the manager opens the new shift.
 
 Important rules:
 - Do not open a separate shift on every tablet if the shop uses one shared cash drawer.
@@ -54,8 +56,30 @@ Important rules:
 - Turn on automatic date/time and automatic time zone in Android settings.
 - Sync all tablets before closing the shift.
 - Only the manager should close the final shift.
+- Do not let the POS automatically close a shift. The final drawer count must be entered by the manager.
 
 If a tablet does not show the same active shift, go to Settings and use Sync Now. If it still does not match, ask the manager before selling.
+
+## 2:00 AM Business-Day Cutoff
+
+The business day runs from 2:00 AM to 1:59 AM the next calendar day. Sales from midnight through 1:59 AM still belong to the previous business date.
+
+At 1:45 AM, the POS may show a warning that the business day is ending soon. Finish active checkouts and prepare the cash drawer for counting.
+
+At 2:00 AM:
+
+1. Counter devices should stop checkout and keep the cart on screen.
+2. Counter staff should ask the manager to close the shift, then use Sync Now.
+3. The manager counts the physical cash drawer and closes the old shift with the counted amount.
+4. After all tablets sync, the manager opens the new shift.
+5. Sales resume only after the new shift is open.
+
+Possible warning/error messages:
+- `Business day ends in 15 minutes. Prepare for drawer count.`
+- `Business day ended--ask the manager to close the shift, then Sync Now.`
+- `Business day ended. Count the drawer and close Shift #..., then open the new shift.`
+
+Important: Do not open a new shift while an old shift is still open after cutoff. Close and sync the old shift first so cash reports stay accurate.
 
 ## Login
 

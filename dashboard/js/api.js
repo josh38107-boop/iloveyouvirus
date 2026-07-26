@@ -37,8 +37,13 @@ const api = {
   getOrders: (limit = 50, offset = 0) => apiFetch(`/admin/orders?limit=${limit}&offset=${offset}`),
   getHappenings: (start, end) => {
     const params = new URLSearchParams();
-    if (start) params.append('start', start);
-    if (end) params.append('end', end);
+    if (start && end && /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end)) {
+      params.append('fromDate', start);
+      params.append('toDate', end);
+    } else {
+      if (start) params.append('start', start);
+      if (end) params.append('end', end);
+    }
     return apiFetch(`/admin/happenings?${params.toString()}`);
   },
   getInventory: (customRange = null) => {
@@ -121,6 +126,10 @@ const api = {
     method: 'PUT', body: JSON.stringify(discount)
   }),
   getPaymentVoidSettings: () => apiFetch('/admin/payment-void-settings'),
+  getBusinessDaySettings: () => apiFetch('/admin/business-day-settings'),
+  updateBusinessDaySettings: (settings) => apiFetch('/admin/business-day-settings', {
+    method: 'PUT', body: JSON.stringify(settings)
+  }),
   updateVoidRefundPin: (settings) => apiFetch('/admin/payment-void-settings/pin', {
     method: 'PUT', body: JSON.stringify(settings)
   }),
@@ -163,7 +172,8 @@ function formatPeso(cents) {
 // Utility: format timestamp
 function formatDate(ms) {
   if (!ms) return '—';
-  const d = typeof ms === 'number' ? new Date(ms) : new Date(ms);
+  const value = typeof ms === 'string' && /^\d+$/.test(ms.trim()) ? Number(ms) : ms;
+  const d = new Date(value);
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleString('en-PH', {
     month: 'short', day: 'numeric', year: 'numeric',

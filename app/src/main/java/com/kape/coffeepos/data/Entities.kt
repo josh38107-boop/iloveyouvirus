@@ -212,7 +212,9 @@ data class StoreSettings(
     val pwdDiscountPercent: Double = 20.0,
     val discountSettingsUpdatedAt: Long = 0,
     val voidRefundPin: String = "1234",
-    val paymentVoidSettingsUpdatedAt: Long = 0
+    val paymentVoidSettingsUpdatedAt: Long = 0,
+    val businessDayCutoffMinutes: Int = DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES,
+    val businessDaySettingsUpdatedAt: Long = 0
 )
 
 @Entity(primaryKeys = ["shiftId", "ingredientId"])
@@ -294,4 +296,3 @@ data class AuditLog(
     val createdAt: Long,
     val synced: Boolean = false
 )
-

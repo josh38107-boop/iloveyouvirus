@@ -25,8 +25,6 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.UnknownHostException
 import java.security.MessageDigest
-import java.util.Calendar
-import java.util.TimeZone
 import java.util.UUID
 import kotlin.math.min
 import kotlin.random.Random
@@ -217,7 +215,9 @@ internal fun resolveRemoteStoreSettings(
         pwdDiscountPercent = remote.pwdDiscountPercent,
         discountSettingsUpdatedAt = remote.discountSettingsUpdatedAt,
         voidRefundPin = remote.voidRefundPin,
-        paymentVoidSettingsUpdatedAt = remote.paymentVoidSettingsUpdatedAt
+        paymentVoidSettingsUpdatedAt = remote.paymentVoidSettingsUpdatedAt,
+        businessDayCutoffMinutes = remote.businessDayCutoffMinutes,
+        businessDaySettingsUpdatedAt = remote.businessDaySettingsUpdatedAt
     )
 } else remote
 
@@ -557,7 +557,6 @@ class SupabaseSyncManager(
 
                 // 4. Sync Remote Shifts (Download shifts from other devices and map them)
                 downloadShifts()
-                closeStaleOpenShifts()
 
                 // 5. Sync Transactions (Orders, Lines, Payments, Receipts, Snapshots, Adjustments)
                 downloadTransactions()
@@ -1319,7 +1318,9 @@ class SupabaseSyncManager(
             "store_name" to settings.storeName,
             "tax_rate_percent" to settings.taxRatePercent,
             "tip_presets" to settings.tipPresets,
-            "receipt_footer" to settings.receiptFooter
+            "receipt_footer" to settings.receiptFooter,
+            "business_day_cutoff_minutes" to settings.businessDayCutoffMinutes,
+            "business_day_settings_updated_at" to settings.businessDaySettingsUpdatedAt
         )
         return listOf(row)
     }
@@ -1348,6 +1349,12 @@ class SupabaseSyncManager(
                 .ifBlank { localSettings?.voidRefundPin?.takeIf { it.isNotBlank() } ?: "1234" },
             paymentVoidSettingsUpdatedAt = (row["payment_void_settings_updated_at"] as? Number)?.toLong()
                 ?: localSettings?.paymentVoidSettingsUpdatedAt
+                ?: 0,
+            businessDayCutoffMinutes = (row["business_day_cutoff_minutes"] as? Number)?.toInt()
+                ?: localSettings?.businessDayCutoffMinutes
+                ?: DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES,
+            businessDaySettingsUpdatedAt = (row["business_day_settings_updated_at"] as? Number)?.toLong()
+                ?: localSettings?.businessDaySettingsUpdatedAt
                 ?: 0
         )
     }
@@ -1403,17 +1410,6 @@ class SupabaseSyncManager(
         return "shift:${source.first}:${source.second}"
     }
 
-    private fun manilaBusinessDayBounds(now: Long = System.currentTimeMillis()): Pair<Long, Long> {
-        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Manila"))
-        cal.timeInMillis = now
-        cal.set(Calendar.HOUR_OF_DAY, 0)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        val dayStart = cal.timeInMillis
-        return Pair(dayStart, dayStart + 24L * 60L * 60L * 1000L)
-    }
-
     private fun markShiftSynced(shift: Shift, source: Pair<String, Long>) {
         syncPrefs.edit().putString(shiftSyncKey(source), gson.toJson(shiftPayload(shift, source))).apply()
     }
@@ -1452,8 +1448,10 @@ class SupabaseSyncManager(
     }
 
     private suspend fun downloadShifts() {
-        val (dayStart, dayEnd) = manilaBusinessDayBounds()
-        val lookbackStart = minOf(dayStart, (System.currentTimeMillis() - RECENT_TRANSACTION_LOOKBACK_MS).coerceAtLeast(0L))
+        val cutoff = db.settingsDao().settingsNow()?.businessDayCutoffMinutes
+            ?: DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES
+        val window = businessDayWindow(cutoffMinutes = cutoff)
+        val lookbackStart = minOf(window.startMs, (System.currentTimeMillis() - RECENT_TRANSACTION_LOOKBACK_MS).coerceAtLeast(0L))
         val jsonShifts = makeRequest("shift?select=*&device_id=neq.$deviceId&opened_at=gte.$lookbackStart", "GET")
         val listType = object : TypeToken<List<Map<String, Any>>>() {}.type
         val remoteShifts: List<Map<String, Any>> = gson.fromJson(jsonShifts, listType)
@@ -1478,12 +1476,6 @@ class SupabaseSyncManager(
                 cashAddedCents = cashAddedCents,
                 cashRemovedCents = cashRemovedCents
             )
-            val isCurrentBusinessDay = openedAt >= dayStart && openedAt < dayEnd
-            if (closedAt == null && !isCurrentBusinessDay) {
-                Log.d(TAG, "Skipping stale remote open shift $rDeviceId:$rId openedAt=$openedAt")
-                continue
-            }
-
             var localId = getLocalMappedShiftId(rDeviceId, rId)
             if (localId == null) {
                 // Shift does not exist locally. Insert a new shift record.
@@ -1501,31 +1493,6 @@ class SupabaseSyncManager(
                 // were preserved, uploadShifts will publish the merged row.
                 markShiftSynced(remoteShiftRow.copy(id = localId), Pair(rDeviceId, rId))
             }
-        }
-    }
-
-    private suspend fun closeStaleOpenShifts() {
-        val manila = java.util.TimeZone.getTimeZone("Asia/Manila")
-        val cal = java.util.Calendar.getInstance(manila)
-        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-        cal.set(java.util.Calendar.MINUTE, 0)
-        cal.set(java.util.Calendar.SECOND, 0)
-        cal.set(java.util.Calendar.MILLISECOND, 0)
-        val dayStart = cal.timeInMillis
-        val dayEnd = dayStart + 24L * 60L * 60L * 1000L
-
-        val staleOpenShifts = db.shiftDao()
-            .allShiftsNow()
-            .filter { shift ->
-                shift.closedAt == null && (shift.openedAt < dayStart || shift.openedAt >= dayEnd)
-            }
-
-        staleOpenShifts.forEach { shift ->
-            val closedShift = shift.copy(
-                closedAt = System.currentTimeMillis(),
-                endingCashCents = shift.endingCashCents ?: shift.startingCashCents
-            )
-            db.shiftDao().updateShift(closedShift)
         }
     }
 

@@ -244,6 +244,12 @@ interface EmployeeDao {
 
 @Dao
 interface ShiftDao {
+    @Query("SELECT * FROM Shift WHERE closedAt IS NULL ORDER BY openedAt DESC LIMIT 1")
+    fun latestOpenShift(): Flow<Shift?>
+
+    @Query("SELECT * FROM Shift WHERE closedAt IS NULL ORDER BY openedAt DESC LIMIT 1")
+    suspend fun latestOpenShiftNow(): Shift?
+
     @Query("SELECT * FROM Shift WHERE closedAt IS NULL AND openedAt >= :dayStart AND openedAt < :dayEnd ORDER BY openedAt DESC LIMIT 1")
     fun activeShift(dayStart: Long, dayEnd: Long): Flow<Shift?>
 
@@ -483,4 +489,3 @@ interface AuditLogDao {
     @Query("SELECT * FROM AuditLog WHERE synced = 0")
     suspend fun unsyncedNow(): List<AuditLog>
 }
-

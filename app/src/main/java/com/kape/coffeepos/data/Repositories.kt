@@ -221,17 +221,6 @@ internal fun requireValidCustomReportRange(start: Long?, end: Long?): Pair<Long,
     return checkNotNull(start) to checkNotNull(end)
 }
 
-private fun manilaBusinessDayBounds(now: Long = System.currentTimeMillis()): Pair<Long, Long> {
-    val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Manila"))
-    cal.timeInMillis = now
-    cal.set(Calendar.HOUR_OF_DAY, 0)
-    cal.set(Calendar.MINUTE, 0)
-    cal.set(Calendar.SECOND, 0)
-    cal.set(Calendar.MILLISECOND, 0)
-    val dayStart = cal.timeInMillis
-    return Pair(dayStart, dayStart + 24L * 60L * 60L * 1000L)
-}
-
 data class DailyReport(
     val orderCount: Int = 0,
     val grossSalesCents: Int = 0,
@@ -572,13 +561,12 @@ class ShiftRepository(
     private val dao: ShiftDao,
     private val stockSnapshotDao: StockSnapshotDao,
     private val inventoryDao: InventoryDao,
+    private val settingsRepository: SettingsRepository,
     context: Context
 ) {
     private val prefs = context.getSharedPreferences("local_shift_prefs", Context.MODE_PRIVATE)
 
-    val activeShift: Flow<Shift?> = manilaBusinessDayBounds().let { (dayStart, dayEnd) ->
-        dao.activeShift(dayStart, dayEnd)
-    }
+    val activeShift: Flow<Shift?> = dao.latestOpenShift()
 
     suspend fun recoverLocalActiveShiftIfNeeded() = withContext(Dispatchers.IO) {
         prefs.edit()
@@ -587,23 +575,22 @@ class ShiftRepository(
             .apply()
     }
 
-    /**
-     * Closes a stale shared shift from a previous day so the next day starts cleanly.
-     */
     suspend fun ensureTodayShift() = withContext(Dispatchers.IO) {
-        val (dayStart, dayEnd) = manilaBusinessDayBounds()
-        val active = dao.allShiftsNow()
-            .filter { it.closedAt == null }
-            .maxByOrNull { it.openedAt }
-            ?: return@withContext
-
-        if (active.openedAt < dayStart || active.openedAt >= dayEnd) {
-            dao.closeShift(active.id, System.currentTimeMillis(), active.endingCashCents ?: 0)
-        }
+        // Business-day rollover is intentionally manual. Keep a stale open
+        // shift available so the manager can enter the counted drawer cash.
+        dao.latestOpenShiftNow()
     }
 
     suspend fun openShift(employeeId: String, startingCashCents: Int): ShiftOpenResult = withContext(Dispatchers.IO) {
-        val (dayStart, dayEnd) = manilaBusinessDayBounds()
+        val cutoff = settingsRepository.settingsNow().businessDayCutoffMinutes
+        val window = businessDayWindow(cutoffMinutes = cutoff)
+        val dayStart = window.startMs
+        val dayEnd = window.endMs
+        val staleOpenShift = dao.latestOpenShiftNow()
+            ?.takeIf { it.openedAt < dayStart || it.openedAt >= dayEnd }
+        require(staleOpenShift == null) {
+            "Business day ended. Close Shift #${staleOpenShift?.id} with counted cash before opening a new shift."
+        }
         val existing = dao.activeShiftNow(dayStart, dayEnd)
         if (existing != null) {
             prefs.edit()
@@ -674,6 +661,16 @@ class ShiftRepository(
 
     fun getShiftGCashSales(shiftId: Long): Flow<Int> {
         return dao.getShiftGCashSales(shiftId)
+    }
+
+    suspend fun isShiftCurrentBusinessDay(shift: Shift, now: Long = System.currentTimeMillis()): Boolean =
+        withContext(Dispatchers.IO) {
+            val window = businessDayWindow(now, settingsRepository.settingsNow().businessDayCutoffMinutes)
+            shift.openedAt >= window.startMs && shift.openedAt < window.endMs
+        }
+
+    suspend fun minutesUntilCutoff(now: Long = System.currentTimeMillis()): Long = withContext(Dispatchers.IO) {
+        minutesUntilBusinessDayCutoff(now, settingsRepository.settingsNow().businessDayCutoffMinutes)
     }
 
     private companion object {
@@ -749,6 +746,10 @@ class OrderRepository(
         lineCharacters: Int = 32
     ): PosOrder = withContext(Dispatchers.IO) {
         val settings = settingsRepository.settingsNow()
+        val window = businessDayWindow(cutoffMinutes = settings.businessDayCutoffMinutes)
+        require(shift.openedAt >= window.startMs && shift.openedAt < window.endMs) {
+            "Business day ended. Ask the manager to close Shift #${shift.id}, sync devices, then open a new shift."
+        }
         val isComp = paymentMethod.lowercase(Locale.US) == "complimentary"
         val appliedItemDiscount = normalizeAppliedDiscount(lines, itemDiscount)
             ?.takeIf { !isComp }
@@ -852,6 +853,10 @@ class OrderRepository(
         lineCharacters: Int = 32
     ): PosOrder = withContext(Dispatchers.IO) {
         val settings = settingsRepository.settingsNow()
+        val window = businessDayWindow(cutoffMinutes = settings.businessDayCutoffMinutes)
+        require(shift.openedAt >= window.startMs && shift.openedAt < window.endMs) {
+            "Business day ended. Ask the manager to close Shift #${shift.id}, sync devices, then open a new shift."
+        }
         val appliedItemDiscount = normalizeAppliedDiscount(lines, itemDiscount)
         val totals = calculateTotals(lines, appliedItemDiscount?.discountCents ?: 0, tipCents, settings.taxRatePercent)
         val orderId = UUID.randomUUID().toString()
@@ -985,8 +990,9 @@ class OrderRepository(
             orderDao.updateOrderStatus(orderId, "void", null)
 
             if (originalShift.closedAt != null) {
-                val (dayStart, dayEnd) = manilaBusinessDayBounds()
-                val activeShift = shiftDao.activeShiftNow(dayStart, dayEnd)
+                val settings = settingsRepository.settingsNow()
+                val window = businessDayWindow(cutoffMinutes = settings.businessDayCutoffMinutes)
+                val activeShift = shiftDao.activeShiftNow(window.startMs, window.endMs)
                 if (activeShift != null) {
                     val cashAmountCents = orderPayments
                         .filter { it.method.lowercase(Locale.US) == "cash" }
@@ -1130,8 +1136,9 @@ class OrderRepository(
             val now = System.currentTimeMillis()
             orderDao.updateOrderStatus(orderId, "refunded", null)
             if (originalShift.closedAt != null) {
-                val (dayStart, dayEnd) = manilaBusinessDayBounds()
-                val activeShift = shiftDao.activeShiftNow(dayStart, dayEnd)
+                val settings = settingsRepository.settingsNow()
+                val window = businessDayWindow(cutoffMinutes = settings.businessDayCutoffMinutes)
+                val activeShift = shiftDao.activeShiftNow(window.startMs, window.endMs)
                 if (activeShift != null) {
                     val cashAmountCents = orderDao.paymentsForOrder(orderId)
                         .filter { it.method.lowercase(Locale.US) == "cash" }
@@ -1336,7 +1343,8 @@ class ReportsRepository(
     private val orderRepository: OrderRepository,
     private val inventoryRepository: InventoryRepository,
     private val orderDao: OrderDao,
-    private val employeeDao: EmployeeDao
+    private val employeeDao: EmployeeDao,
+    private val settingsRepository: SettingsRepository
 ) {
     val lowStock: Flow<List<Ingredient>> = inventoryRepository.lowStock
 
@@ -1365,7 +1373,8 @@ class ReportsRepository(
         employeeDao.allEmployees(),
         inventoryRepository.ingredients,
         orderDao.adjustments(),
-        orderDao.closedShiftAdjustments()
+        orderDao.closedShiftAdjustments(),
+        settingsRepository.settings
     ) { args ->
         @Suppress("UNCHECKED_CAST")
         val orders   = args[0] as List<PosOrder>
@@ -1383,24 +1392,26 @@ class ReportsRepository(
         val adjustments = args[6] as List<InventoryAdjustment>
         @Suppress("UNCHECKED_CAST")
         val closedShiftAdjustments = args[7] as List<ClosedShiftAdjustment>
+        val settings = args[8] as StoreSettings?
+        val cutoffMinutes = settings?.businessDayCutoffMinutes ?: DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES
 
         // Date window
         val now = System.currentTimeMillis()
         var windowEnd = Long.MAX_VALUE
         val windowStart: Long = when (dateRange) {
             ReportDateRange.TODAY -> {
-                val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Manila"))
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                cal.set(java.util.Calendar.MINUTE, 0)
-                cal.set(java.util.Calendar.SECOND, 0)
-                cal.set(java.util.Calendar.MILLISECOND, 0)
-                cal.timeInMillis
+                val window = businessDayWindow(now, cutoffMinutes)
+                windowEnd = window.endMs
+                window.startMs
             }
             ReportDateRange.MONTH -> now - 30L * 24 * 60 * 60 * 1000
             ReportDateRange.ALL   -> 0L
             ReportDateRange.CUSTOM -> {
-                windowEnd = checkNotNull(customWindow).second
-                customWindow.first
+                val (startDate, endDate) = checkNotNull(customWindow)
+                val (start, _) = businessDateWindow(startDate, cutoffMinutes)
+                val (_, end) = businessDateWindow(endDate, cutoffMinutes)
+                windowEnd = end
+                start
             }
         }
 
@@ -1415,13 +1426,13 @@ class ReportsRepository(
 
         val paid = orders.filter { o ->
             o.status == "paid" &&
-                reportTime(o) in windowStart..windowEnd &&
+                reportTime(o) >= windowStart && reportTime(o) < windowEnd &&
                 matchesSelectedCashier(o.shiftId)
         }
         val paidNonComplimentary = paid.filter { it.id !in complimentaryOrderIds }
         val paymentsInWindow = payments.filter { p ->
             val order = orderMap[p.orderId]
-            p.createdAt in windowStart..windowEnd && order?.status == "paid"
+            p.createdAt >= windowStart && p.createdAt < windowEnd && order?.status == "paid"
         }
         val filteredPayments = paymentsInWindow.filter { payment ->
             orderMap[payment.orderId]?.shiftId?.let(::matchesSelectedCashier) == true
@@ -1462,12 +1473,7 @@ class ReportsRepository(
             .mapValues { (_, os) -> os.sumOf { it.totalCents } }
 
         fun shiftBusinessDay(shift: Shift): Long {
-            cal.timeInMillis = shift.openedAt
-            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-            cal.set(java.util.Calendar.MINUTE, 0)
-            cal.set(java.util.Calendar.SECOND, 0)
-            cal.set(java.util.Calendar.MILLISECOND, 0)
-            return cal.timeInMillis
+            return businessDayWindow(shift.openedAt, cutoffMinutes).startMs
         }
 
         val paidOrderIdsInWindow = paid.map { it.id }.toSet()
@@ -1570,7 +1576,7 @@ class ReportsRepository(
             .sortedByDescending { it.salesCents }
 
         // Ingredient usage from adjustments in window
-        val filteredAdj = adjustments.filter { it.createdAt in windowStart..windowEnd }
+        val filteredAdj = adjustments.filter { it.createdAt >= windowStart && it.createdAt < windowEnd }
         val adjByIngredient = filteredAdj.groupBy { it.ingredientId }
         val ingredientUsage = ingredients.map { ingredient ->
             val adjs = adjByIngredient[ingredient.id].orEmpty()
@@ -1607,7 +1613,7 @@ class ReportsRepository(
             cashDrawerAdded = totalAdded,
             cashDrawerRemoved = totalRemoved,
             closedShiftAdjustments = closedShiftAdjustments.filter {
-                it.createdAt in windowStart..windowEnd &&
+                it.createdAt >= windowStart && it.createdAt < windowEnd &&
                     (cashierEmployeeId == null || it.currentShiftId in filteredShiftIds)
             },
             shifts = allShiftsInWindow
@@ -1774,4 +1780,3 @@ class AuditLogRepository(
         return list.sortedByDescending { it.timestamp }
     }
 }
-
