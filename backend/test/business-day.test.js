@@ -23,7 +23,7 @@ test('reports use business-date ranges and half-open windows', () => {
   const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.match(server, /windowForBusinessDate\(fromDate, cutoffMinutes\)/);
   assert.match(server, /toMs: to\.endMs/);
-  assert.match(server, /created_at >= \$1 AND created_at < \$2/);
+  assert.match(server, /o\.created_at >= \$1 AND o\.created_at < \$2/);
   assert.match(server, /created_at - \$3/);
   assert.match(server, /AT TIME ZONE 'Asia\/Manila'/);
 });

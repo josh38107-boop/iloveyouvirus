@@ -90,9 +90,9 @@
         </div>
         <div class="stat-card">
           <span class="stat-icon">📊</span>
-          <div class="stat-label">Avg. Order Value</div>
+          <div class="stat-label">Gross Sales</div>
           <div class="stat-value" id="statAvg">—</div>
-          <div class="stat-sub">Per transaction</div>
+          <div class="stat-sub">Before discounts</div>
         </div>
         <div class="stat-card">
           <span class="stat-icon">⭐</span>
@@ -237,12 +237,12 @@
 
     const orders = stats.ordersToday || 0;
     const revenue = stats.revenueToday || 0;
-    const avg = orders > 0 ? Math.round(revenue / orders) : 0;
+    const grossSales = stats.grossSales || 0;
     const topItem = stats.topItems?.[0]?.name || '—';
 
     document.getElementById('statOrders').textContent = orders.toLocaleString();
     document.getElementById('statRevenue').textContent = formatPeso(revenue);
-    document.getElementById('statAvg').textContent = formatPeso(avg);
+    document.getElementById('statAvg').textContent = formatPeso(grossSales);
     document.getElementById('statTop').textContent = topItem;
 
     // Top items list

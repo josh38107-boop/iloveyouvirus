@@ -70,9 +70,9 @@
     <div class="content fade-up">
       <!-- Summary cards -->
       <div class="stats-grid" id="reportStats">
-        <div class="stat-card"><span class="stat-icon">💰</span><div class="stat-label">Total Revenue</div><div class="stat-value" id="rRevenue">—</div></div>
         <div class="stat-card"><span class="stat-icon">🧾</span><div class="stat-label">Total Orders</div><div class="stat-value" id="rOrders">—</div></div>
-        <div class="stat-card"><span class="stat-icon">📊</span><div class="stat-label">Avg Per Day</div><div class="stat-value" id="rAvgDay">—</div></div>
+        <div class="stat-card"><span class="stat-icon">💰</span><div class="stat-label">Total Revenue</div><div class="stat-value" id="rRevenue">—</div></div>
+        <div class="stat-card"><span class="stat-icon">📊</span><div class="stat-label">Gross Sales</div><div class="stat-value" id="rAvgDay">—</div></div>
         <div class="stat-card"><span class="stat-icon">🏆</span><div class="stat-label">Best Day Revenue</div><div class="stat-value" id="rBestDay">—</div></div>
       </div>
 
@@ -172,12 +172,12 @@
 
     const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue||0), 0);
     const totalOrders = reportData.reduce((s, d) => s + parseInt(d.orders||0), 0);
-    const avgDay = reportData.length ? Math.round(totalRevenue / reportData.length) : 0;
+    const grossSales = stats.grossSales || 0;
     const bestDay = reportData.reduce((m, d) => Math.max(m, parseInt(d.revenue||0)), 0);
 
     document.getElementById('rRevenue').textContent = formatPeso(totalRevenue);
     document.getElementById('rOrders').textContent = totalOrders.toLocaleString();
-    document.getElementById('rAvgDay').textContent = formatPeso(avgDay);
+    document.getElementById('rAvgDay').textContent = formatPeso(grossSales);
     document.getElementById('rBestDay').textContent = formatPeso(bestDay);
 
     const discountContainer = document.getElementById('discountBreakdown');

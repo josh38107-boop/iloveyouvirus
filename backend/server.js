@@ -503,6 +503,14 @@ function paymentCategory(row) {
   return '';
 }
 
+function nonComplimentaryOrderPredicate(orderAlias) {
+  return `NOT EXISTS (
+          SELECT 1 FROM payment complimentary_payment
+          WHERE complimentary_payment.order_id = ${orderAlias}.id
+            AND LOWER(complimentary_payment.method) = 'complimentary'
+        )`;
+}
+
 app.get('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
   try {
     const settingsRes = await db.query(`SELECT id, business_day_cutoff_minutes, business_day_settings_updated_at
@@ -593,8 +601,9 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
                COALESCE(SUM(total_cents), 0) as net
-        FROM pos_order
-        WHERE created_at >= $1 AND created_at < $2 AND status = 'paid'
+        FROM pos_order o
+        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
+          AND ${nonComplimentaryOrderPredicate('o')}
       `, [fromMs, toMs]),
       db.query(`
         WITH deduped_order_line AS (
@@ -615,6 +624,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM deduped_order_line ol
         JOIN pos_order o ON o.id = ol.order_id
         WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
+          AND ${nonComplimentaryOrderPredicate('o')}
         GROUP BY name ORDER BY qty DESC
       `, [fromMs, toMs]),
       db.query(`
@@ -667,8 +677,9 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
                COALESCE(discount_scope, 'item') AS scope,
                COUNT(*) AS order_count,
                COALESCE(SUM(discount_cents), 0) AS amount_cents
-        FROM pos_order
-        WHERE created_at >= $1 AND created_at < $2 AND status = 'paid' AND discount_cents > 0
+        FROM pos_order o
+        WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid' AND o.discount_cents > 0
+          AND ${nonComplimentaryOrderPredicate('o')}
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
       `, [fromMs, toMs])
@@ -725,11 +736,12 @@ app.get('/admin/sales', adminAuthenticate, async (req, res) => {
     const { fromMs, toMs, cutoffMinutes } = await reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
     const result = await db.query(`
       SELECT
-        TO_CHAR(TO_TIMESTAMP((created_at - $3) / 1000) AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') as date,
+        TO_CHAR(TO_TIMESTAMP((o.created_at - $3) / 1000) AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') as date,
         COUNT(*) as orders,
-        COALESCE(SUM(total_cents), 0) as revenue
-      FROM pos_order
-      WHERE created_at >= $1 AND created_at < $2 AND status = 'paid'
+        COALESCE(SUM(o.total_cents), 0) as revenue
+      FROM pos_order o
+      WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
+        AND ${nonComplimentaryOrderPredicate('o')}
       GROUP BY date ORDER BY date
     `, [fromMs, toMs, cutoffMinutes * 60 * 1000]);
     res.json(result.rows);
