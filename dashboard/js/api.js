@@ -47,6 +47,9 @@ const api = {
     }
     return apiFetch(`/admin/happenings?${params.toString()}`);
   },
+  deleteHappening: (id) => apiFetch(`/admin/happenings/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  }),
   getInventory: (customRange = null) => {
 
     if (customRange?.fromDate && customRange?.toDate) {

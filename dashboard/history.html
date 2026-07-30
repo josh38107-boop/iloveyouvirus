@@ -36,6 +36,7 @@
     .cat-shifts { background: rgba(156, 39, 176, 0.2); color: #ab47bc; }
     .cat-inventory { background: rgba(255, 152, 0, 0.2); color: #ffa726; }
     .cat-system { background: rgba(33, 150, 243, 0.2); color: #42a5f5; }
+    .history-delete { padding: 6px 10px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -175,6 +176,23 @@
     renderHappenings();
   }
 
+  function canDeleteHappening(h) {
+    return h && h.category === 'Shifts' && /^(SHIFT_OPENED|SHIFT_CLOSED)$/.test(h.eventType || '');
+  }
+
+  async function deleteHappening(id) {
+    const target = allHappenings.find(h => h.id === id);
+    if (!canDeleteHappening(target)) return;
+    if (!confirm(`Delete "${target.title}" from Activity History? This will not delete shift, sales, or report data.`)) return;
+    try {
+      await api.deleteHappening(id);
+      allHappenings = allHappenings.filter(h => h.id !== id);
+      renderHappenings();
+    } catch (err) {
+      alert('Unable to delete activity history entry: ' + err.message);
+    }
+  }
+
   async function loadHappenings() {
     const el = document.getElementById('historyTable');
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading happenings...</div>';
@@ -223,7 +241,7 @@
 
     el.innerHTML = `<div style="overflow-x:auto;"><table class="data-table">
       <thead><tr>
-        <th>Category</th><th>Event / Action</th><th>Description</th><th>User / Actor</th><th>Date &amp; Time</th><th>Qty / Amount</th>
+        <th>Category</th><th>Event / Action</th><th>Description</th><th>User / Actor</th><th>Date &amp; Time</th><th>Qty / Amount</th><th>Actions</th>
       </tr></thead>
       <tbody>${filtered.map(h => {
         const catClass = 'cat-' + (h.category || 'system').toLowerCase();
@@ -239,6 +257,9 @@
           amtStr = '—';
           amtColor = 'var(--text-muted)';
         }
+        const actions = canDeleteHappening(h)
+          ? `<button type="button" class="btn btn-delete-outline history-delete" onclick="deleteHappening('${escapeHtml(h.id)}')">Delete</button>`
+          : '';
         return `<tr>
           <td><span class="badge-cat ${catClass}">${escapeHtml(h.category)}</span></td>
           <td style="font-weight:600;color:#fff;">${escapeHtml(h.title)}</td>
@@ -246,6 +267,7 @@
           <td style="font-size:13px;">${escapeHtml(h.actorName || 'Staff')}</td>
           <td style="font-size:12px;color:var(--text-muted);">${formatDate(h.timestamp)}</td>
           <td style="font-weight:700;color:${amtColor};">${amtStr}</td>
+          <td>${actions}</td>
         </tr>`;
       }).join('')}
       </tbody></table></div>`;

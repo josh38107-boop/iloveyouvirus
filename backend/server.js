@@ -50,6 +50,7 @@ const RESET_GUARDED_RPCS = new Set([
 
 const MANILA_TIME_ZONE = 'Asia/Manila';
 const DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES = 120;
+const HIDEABLE_HAPPENING_ID_PATTERN = /^shift-(open|close)-\d+$/;
 
 function normalizeCutoffMinutes(value) {
   const minutes = Number(value);
@@ -1130,6 +1131,7 @@ app.delete('/admin/employees/:id', adminAuthenticate, async (req, res) => {
 // ─── Happenings / Audit History Endpoint ──────────────────────────────────────
 async function handleGetHappenings(req, res) {
   try {
+    await ensureHiddenActivityHistoryTable();
     const { start, end, fromDate, toDate } = req.query;
 
     // All timestamp columns here are bigint (epoch ms)
@@ -1235,15 +1237,49 @@ async function handleGetHappenings(req, res) {
       }
     });
 
-    list.sort((a, b) => b.timestamp - a.timestamp);
-    res.json(list);
+    const hiddenRows = await db.query('SELECT event_id FROM hidden_activity_history')
+      .catch(() => ({ rows: [] }));
+    const hiddenIds = new Set((hiddenRows.rows || []).map(row => row.event_id));
+    const visibleList = list.filter(item => !(hiddenIds.has(item.id) && HIDEABLE_HAPPENING_ID_PATTERN.test(item.id)));
+    visibleList.sort((a, b) => b.timestamp - a.timestamp);
+    res.json(visibleList);
   } catch (err) {
     console.error('GET happenings error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
 
+async function ensureHiddenActivityHistoryTable() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hidden_activity_history (
+      event_id TEXT PRIMARY KEY,
+      hidden_by TEXT NOT NULL DEFAULT 'admin',
+      hidden_at BIGINT NOT NULL
+    )
+  `);
+}
+
 app.get('/admin/happenings', adminAuthenticate, handleGetHappenings);
+app.delete('/admin/happenings/:id', adminAuthenticate, async (req, res) => {
+  try {
+    const eventId = String(req.params.id || '');
+    if (!HIDEABLE_HAPPENING_ID_PATTERN.test(eventId)) {
+      return res.status(400).json({ error: 'Only shift activity history entries can be deleted.' });
+    }
+    await ensureHiddenActivityHistoryTable();
+    await db.query(
+      `INSERT INTO hidden_activity_history(event_id, hidden_by, hidden_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (event_id) DO UPDATE
+       SET hidden_by = EXCLUDED.hidden_by, hidden_at = EXCLUDED.hidden_at`,
+      [eventId, req.admin?.username || 'admin', Date.now()]
+    );
+    res.status(204).end();
+  } catch (err) {
+    console.error('DELETE happening error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 app.get('/rest/v1/happenings', (req, res, next) => {
   adminAuthenticate(req, res, (err) => {
     if (!err && req.admin) return handleGetHappenings(req, res);
