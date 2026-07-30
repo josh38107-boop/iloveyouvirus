@@ -265,7 +265,7 @@
     try {
       const stats = await api.getStats(days, customRange);
       if (!stats) throw new Error('No report data was returned');
-      ReportWorkbook.download(stats, days);
+      ReportWorkbook.download(stats, days, customRange);
     } catch (error) {
       alert('Unable to export the report: ' + error.message);
     } finally {

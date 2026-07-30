@@ -80,7 +80,8 @@ function verifyAdminSession(token) {
 
 function sessionCookie(value, clear = false) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  return `${SESSION_COOKIE}=${clear ? '' : encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict${secure}; Max-Age=${clear ? 0 : 28800}`;
+  const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Strict';
+  return `${SESSION_COOKIE}=${clear ? '' : encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=${sameSite}${secure}; Max-Age=${clear ? 0 : 28800}`;
 }
 
 function createRateLimiter({ windowMs, max }) {
@@ -150,8 +151,12 @@ function createCloud(db) {
     return deviceAuth(req, res, next);
   }
 
-  const configuredOrigins = String(process.env.ALLOWED_ORIGINS || process.env.RENDER_EXTERNAL_URL || '')
-    .split(',').map(value => value.trim().replace(/\/$/, '')).filter(Boolean);
+  const configuredOrigins = [
+    ...String(process.env.ALLOWED_ORIGINS || '').split(','),
+    process.env.RENDER_EXTERNAL_URL,
+    'https://iloveyouvirus.onrender.com',
+    'https://kanlungan-coffee-api.onrender.com'
+  ].map(value => String(value || '').trim().replace(/\/$/, '')).filter(Boolean);
   const corsOptions = {
     credentials: true,
     origin(origin, callback) {

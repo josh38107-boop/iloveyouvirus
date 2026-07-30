@@ -1,10 +1,13 @@
 // Admin auth uses an expiring HttpOnly session cookie; no secret is stored in JavaScript.
+const ADMIN_API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3000'
+  : 'https://kanlungan-coffee-api.onrender.com';
 
 async function login(username, password) {
   try {
-    const res = await fetch(`${window.location.origin}/admin/login`, {
+    const res = await fetch(`${ADMIN_API_BASE}/admin/login`, {
       method: 'POST',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
@@ -21,7 +24,7 @@ async function login(username, password) {
 
 async function logout(callServer = true) {
   if (callServer) {
-    await fetch(`${window.location.origin}/admin/logout`, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    await fetch(`${ADMIN_API_BASE}/admin/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
   }
   sessionStorage.removeItem('kape_admin_session');
   sessionStorage.removeItem('kape_user');
@@ -33,7 +36,7 @@ function requireAuth() {
     window.location.href = 'login.html';
     return false;
   }
-  fetch(`${window.location.origin}/admin/session`, { credentials: 'same-origin' })
+  fetch(`${ADMIN_API_BASE}/admin/session`, { credentials: 'include' })
     .then((res) => { if (!res.ok) logout(false); })
     .catch(() => {});
   return true;

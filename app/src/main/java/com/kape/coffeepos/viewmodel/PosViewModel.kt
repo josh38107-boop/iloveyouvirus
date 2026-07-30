@@ -44,6 +44,7 @@ import com.kape.coffeepos.printer.buildPromotionTestQrUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -78,6 +79,143 @@ internal fun orderPaymentCategoryLabel(payments: List<Payment>): String? {
         .filter { it in categories }
         .takeIf { it.isNotEmpty() }
         ?.joinToString(" + ")
+}
+
+internal fun closeShiftAutoPrintRange(): ReportDateRange = ReportDateRange.TODAY
+internal fun closeShiftAutoPrintRangeName(): String = "Today"
+
+internal fun buildDayEndClosingReportText(report: DailyReport, rangeName: String, W: Int): String {
+    val div = "-".repeat(W)
+    val doubleDiv = "=".repeat(W)
+
+    fun center(text: String): String {
+        val pad = ((W - text.length) / 2).coerceAtLeast(0)
+        return " ".repeat(pad) + text
+    }
+
+    fun row(left: String, right: String, width: Int = W): String {
+        val space = (width - left.length - right.length).coerceAtLeast(1)
+        return left + " ".repeat(space) + right
+    }
+
+    fun formatMoney(cents: Int): String {
+        return String.format(Locale.US, "₱%,.2f", cents / 100.0)
+    }
+
+    fun shortId(id: String): String = id.take(10)
+    fun clean(text: String): String = text.replace('\n', ' ').replace('\r', ' ').trim()
+
+    val sdf = java.text.SimpleDateFormat("MM/dd/yyyy h:mm a", Locale.US).apply {
+        timeZone = java.util.TimeZone.getTimeZone("Asia/Manila")
+    }
+    val dateStr = sdf.format(java.util.Date())
+    val reportId = "EOD-" + java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+        .apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Manila") }
+        .format(java.util.Date())
+
+    val sb = StringBuilder()
+    sb.appendLine(center("Day-end Closing"))
+    sb.appendLine(row("Report ID:", reportId))
+    sb.appendLine(row("Date:", dateStr))
+    sb.appendLine(row("Range:", rangeName))
+    sb.appendLine(row("Register ID:", "-"))
+    sb.appendLine(row("Serial no:", "-"))
+    sb.appendLine(doubleDiv)
+
+    sb.appendLine("Total net sales")
+    sb.appendLine(row("${report.orderCount}   Sales", formatMoney(report.netSalesCents)))
+    sb.appendLine(row("0   Returns", formatMoney(0)))
+    sb.appendLine(div)
+    sb.appendLine(row("Total net sales:", formatMoney(report.netSalesCents)))
+    sb.appendLine(row("Taxes:", formatMoney(report.taxCents)))
+    sb.appendLine(row("Discounts:", "-" + formatMoney(report.discountsCents)))
+    sb.appendLine(row("Total gross sum:", formatMoney(report.grossSalesCents)))
+    sb.appendLine(div)
+
+    sb.appendLine("Cancelled receipts")
+    if (report.cancelledOrders.isEmpty()) {
+        sb.appendLine("  No cancelled receipts")
+    } else {
+        sb.appendLine(row("#ID / Reason", "Net        Gross"))
+        report.cancelledOrders.forEach { order ->
+            sb.appendLine(row(shortId(order.id) + " " + clean(order.reason), formatMoney(order.netCents)))
+            sb.appendLine(row("", formatMoney(order.grossCents)))
+        }
+    }
+    sb.appendLine(div)
+
+    sb.appendLine("Cash balance")
+    sb.appendLine(row("Cash register balance (previous)", formatMoney(report.cashDrawerStarting)))
+    sb.appendLine(row("CASH gross sales", formatMoney(report.cashDrawerSales)))
+    sb.appendLine(row("Online/non-cash", formatMoney(report.onlinePaymentSalesCents)))
+    sb.appendLine(row("Withdrawals", formatMoney(report.cashDrawerRemoved)))
+    sb.appendLine(row("Change (for non-cash)", formatMoney(0)))
+    sb.appendLine(row("Expected cash", formatMoney(report.cashDrawerExpected)))
+    sb.appendLine(row("Cash register balance (counted)", formatMoney(report.cashDrawerActual)))
+    sb.appendLine(row("Difference", formatMoney(report.cashDrawerDifference)))
+    sb.appendLine(row("Cash register balance new", formatMoney(report.cashDrawerActual)))
+    sb.appendLine(div)
+
+    sb.appendLine("Total revenue per VAT rate")
+    sb.appendLine(row("St %", "Net        Tax     Gross"))
+    val taxRateLabel = if (report.taxRatePercent > 0.0) {
+        String.format(Locale.US, "%.2f%%", report.taxRatePercent)
+    } else {
+        "0%"
+    }
+    sb.appendLine(row(taxRateLabel, "${formatMoney(report.netSalesCents)} ${formatMoney(report.taxCents)} ${formatMoney(report.grossSalesCents)}"))
+    sb.appendLine(row("Total", "${formatMoney(report.netSalesCents)} ${formatMoney(report.taxCents)} ${formatMoney(report.grossSalesCents)}"))
+    sb.appendLine(div)
+
+    sb.appendLine("Total revenue per payment method")
+    if (report.paymentTotals.isEmpty()) {
+        sb.appendLine("  No transactions")
+    } else {
+        report.paymentTotals.toSortedMap().forEach { (method, cents) ->
+            sb.appendLine(row(clean(method).ifBlank { "-" }, formatMoney(cents)))
+        }
+        sb.appendLine(row("Total", formatMoney(report.paymentTotals.values.sum())))
+    }
+    sb.appendLine(div)
+
+    sb.appendLine("Top Selling Items:")
+    if (report.topItems.isEmpty()) {
+        sb.appendLine("  No items sold")
+    } else {
+        report.topItems.forEach { item ->
+            val cleanedName = clean(item.name)
+            val left = "${item.qtySold}x $cleanedName"
+            val right = formatMoney(item.revenueCents)
+            if (left.length + right.length + 3 <= W) {
+                sb.appendLine("  " + row(left, right, W - 2))
+            } else {
+                sb.appendLine("  $left")
+                sb.appendLine("  " + row("", right, W - 2))
+            }
+        }
+    }
+    sb.appendLine(div)
+
+    sb.appendLine("Processed Orders")
+    if (report.processedOrders.isEmpty()) {
+        sb.appendLine("  No processed orders")
+    } else {
+        report.processedOrders.forEach { order ->
+            sb.appendLine(row("#${shortId(order.id)}", formatMoney(order.totalCents)))
+            sb.appendLine("  " + sdf.format(java.util.Date(order.timestamp)))
+            sb.appendLine("  Cashier: ${clean(order.cashierName)}")
+            order.customerName?.takeIf { it.isNotBlank() }?.let {
+                sb.appendLine("  Customer: ${clean(it)}")
+            }
+            sb.appendLine("  Payment: ${clean(order.paymentLabel)}")
+            order.lines.forEach { line ->
+                sb.appendLine("    ${line.quantity}x ${clean(line.name)}")
+            }
+        }
+    }
+    sb.appendLine(doubleDiv)
+    sb.appendLine(center("End of Report"))
+    return sb.toString()
 }
 
 internal fun terminalAuditReceiptText(
@@ -2308,6 +2446,8 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             }
             val cashCountedCents = (cashCountedDouble * 100).roundToInt()
             container.shiftRepository.closeShift(shiftId = shift.id, endingCashCents = cashCountedCents)
+            val profile = state.printerProfile
+            val W = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
             _uiState.update {
                 it.copy(
                     activeShift = null,
@@ -2316,8 +2456,30 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     showCloseShiftDialog = false,
                     cashCountedInput = "",
                     startingCashInput = formatPaymentInput(cashCountedCents),
-                    statusMessage = "Shift #${shift.id} closed. Enter starting cash to open the next shift.",
+                    printerBusy = true,
+                    printerMessage = "Printing day-end closing report...",
+                    statusMessage = "Shift #${shift.id} closed. Printing day-end closing report...",
                     screen = AppScreen.DRAWER
+                )
+            }
+            val report = container.reportsRepository
+                .reportFlow(closeShiftAutoPrintRange(), cashierEmployeeId = null)
+                .first()
+            val reportText = buildDayEndClosingReportText(report, closeShiftAutoPrintRangeName(), W)
+            val printResult = container.printerManager.print(reportText)
+            _uiState.update {
+                val message = if (printResult.success) {
+                    "Shift #${shift.id} closed and day-end report printed to ${printResult.device?.name ?: "printer"}."
+                } else {
+                    "Shift #${shift.id} closed, but day-end report did not print: ${printResult.message}"
+                }
+                it.copy(
+                    printerBusy = false,
+                    connectedPrinter = printResult.device ?: container.printerManager.connectedPrinter(),
+                    savedPrinterAddress = container.printerManager.savedPrinterAddress,
+                    printerPermissionNeeded = !container.printerManager.hasBluetoothPermission(),
+                    printerMessage = message,
+                    statusMessage = message
                 )
             }
             triggerSupabaseSync()
@@ -3859,88 +4021,8 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun buildSalesReportText(report: DailyReport, rangeName: String, W: Int): String {
-        val div = "-".repeat(W)
-        val doubleDiv = "=".repeat(W)
-
-        fun center(text: String): String {
-            val pad = ((W - text.length) / 2).coerceAtLeast(0)
-            return " ".repeat(pad) + text
-        }
-
-        fun row(left: String, right: String, width: Int = W): String {
-            val space = (width - left.length - right.length).coerceAtLeast(1)
-            return left + " ".repeat(space) + right
-        }
-
-        fun formatMoney(cents: Int): String {
-            return String.format(java.util.Locale.US, "₱%,.2f", cents / 100.0)
-        }
-
-        val sdf = java.text.SimpleDateFormat("MM/dd/yyyy h:mm a", java.util.Locale.US).apply {
-            timeZone = java.util.TimeZone.getTimeZone("Asia/Manila")
-        }
-        val dateStr = sdf.format(java.util.Date())
-
-        val sb = java.lang.StringBuilder()
-        sb.appendLine(center("SALES REPORT"))
-        sb.appendLine(center(rangeName))
-        sb.appendLine(center("Generated: $dateStr"))
-        sb.appendLine(doubleDiv)
-
-        // Summary
-        sb.appendLine(row("Orders:", report.orderCount.toString()))
-        sb.appendLine(row("Gross Sales:", formatMoney(report.grossSalesCents)))
-        if (report.discountsCents > 0) {
-            sb.appendLine(row("Less Discounts:", "-" + formatMoney(report.discountsCents)))
-        }
-        sb.appendLine(row("Net Sales:", formatMoney(report.netSalesCents)))
-        sb.appendLine(div)
-
-        // Payment breakdown
-        sb.appendLine("Payment Breakdown:")
-        if (report.paymentTotals.isEmpty()) {
-            sb.appendLine("  No transactions")
-        } else {
-            report.paymentTotals.forEach { (method, cents) ->
-                sb.appendLine("  " + row(method, formatMoney(cents), W - 2))
-            }
-        }
-        sb.appendLine(div)
-
-        // Top Selling Items
-        sb.appendLine("Top Selling Items:")
-        if (report.topItems.isEmpty()) {
-            sb.appendLine("  No items sold")
-        } else {
-            report.topItems.forEach { item ->
-                val cleanedName = item.name.replace('\n', ' ').replace('\r', ' ')
-                val left = "${item.qtySold}x $cleanedName"
-                val right = formatMoney(item.revenueCents)
-                if (left.length + right.length + 3 <= W) {
-                    sb.appendLine("  " + row(left, right, W - 2))
-                } else {
-                    sb.appendLine("  $left")
-                    sb.appendLine("  " + row("", right, W - 2))
-                }
-            }
-        }
-        sb.appendLine(div)
-
-        // Cash Drawer Summary
-        sb.appendLine("Cash Drawer Summary:")
-        sb.appendLine("  " + row("Starting Cash:", formatMoney(report.cashDrawerStarting), W - 2))
-        val gcashSales = report.onlinePaymentSalesCents
-        val totalCashAndGCash = report.cashDrawerExpected + gcashSales
-        sb.appendLine("  " + row("Expected Cash:", formatMoney(report.cashDrawerExpected), W - 2))
-        sb.appendLine("  " + row("Online Payments:", formatMoney(gcashSales), W - 2))
-        sb.appendLine("  " + row("Total Cash + Online Payment:", formatMoney(totalCashAndGCash), W - 2))
-        sb.appendLine("  " + row("Actual Cash:", formatMoney(report.cashDrawerActual), W - 2))
-        sb.appendLine("  " + row("Difference:", formatMoney(report.cashDrawerDifference), W - 2))
-        sb.appendLine(doubleDiv)
-        sb.appendLine(center("End of Report"))
-        return sb.toString()
-    }
+    internal fun buildSalesReportText(report: DailyReport, rangeName: String, W: Int): String =
+        buildDayEndClosingReportText(report, rangeName, W)
 
     fun refreshPromotionConfig() {
         if (!container.supabaseSyncManager.isConfigured()) {

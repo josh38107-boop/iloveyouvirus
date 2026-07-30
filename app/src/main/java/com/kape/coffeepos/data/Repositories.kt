@@ -192,6 +192,26 @@ data class ShiftOpenResult(
 
 data class TopSellingItem(val name: String, val qtySold: Int, val revenueCents: Int)
 
+data class ReportOrderLine(val quantity: Int, val name: String)
+
+data class ReportProcessedOrder(
+    val id: String,
+    val timestamp: Long,
+    val cashierName: String,
+    val customerName: String?,
+    val paymentLabel: String,
+    val totalCents: Int,
+    val lines: List<ReportOrderLine>
+)
+
+data class ReportCancelledOrder(
+    val id: String,
+    val timestamp: Long,
+    val reason: String,
+    val netCents: Int,
+    val grossCents: Int
+)
+
 data class EmployeeBreakdown(val employeeId: String, val name: String, val orderCount: Int, val salesCents: Int)
 
 data class IngredientUsageSummary(
@@ -241,7 +261,11 @@ data class DailyReport(
     val cashDrawerAdded: Int = 0,
     val cashDrawerRemoved: Int = 0,
     val closedShiftAdjustments: List<ClosedShiftAdjustment> = emptyList(),
-    val shifts: List<Shift> = emptyList()
+    val shifts: List<Shift> = emptyList(),
+    val processedOrders: List<ReportProcessedOrder> = emptyList(),
+    val cancelledOrders: List<ReportCancelledOrder> = emptyList(),
+    val taxRatePercent: Double = 0.0,
+    val taxCents: Int = 0
 )
 
 class MenuRepository(
@@ -1418,6 +1442,7 @@ class ReportsRepository(
         val complimentaryOrderIds = payments.filter { it.method.lowercase(Locale.US) == "complimentary" }.map { it.orderId }.toSet()
         fun reportTime(order: PosOrder): Long = order.paidAt ?: order.createdAt
         val orderMap = orders.associateBy { it.id }
+        val empMap = employees.associateBy { it.id }
         val selectedCashierShiftIds = cashierEmployeeId?.let { employeeId ->
             shifts.filter { it.employeeId == employeeId }.map { it.id }.toSet()
         }
@@ -1451,6 +1476,8 @@ class ReportsRepository(
 
         val paidOrderIds = paid.map { it.id }.toSet()
         val paidLines = lines.filter { it.orderId in paidOrderIds }
+        val linesByOrder = lines.groupBy { it.orderId }
+        val paymentsByOrder = filteredPayments.groupBy { it.orderId }
         val topItems = paidLines
             .groupBy { it.name }
             .map { (name, ls) ->
@@ -1463,6 +1490,49 @@ class ReportsRepository(
             }
             .filter { it.qtySold > 0 }
             .sortedByDescending { it.qtySold }
+
+        fun paymentLabel(orderId: String): String {
+            val orderPayments = paymentsByOrder[orderId].orEmpty()
+            if (orderPayments.isEmpty()) return "-"
+            return orderPayments
+                .map { payment -> payment.method.ifBlank { payment.paymentCategory ?: "-" } }
+                .distinct()
+                .joinToString(" + ")
+        }
+
+        val processedOrders = paidNonComplimentary
+            .sortedBy { reportTime(it) }
+            .map { order ->
+                ReportProcessedOrder(
+                    id = order.id,
+                    timestamp = reportTime(order),
+                    cashierName = empMap[order.employeeId]?.name ?: order.employeeId,
+                    customerName = order.customerName,
+                    paymentLabel = paymentLabel(order.id),
+                    totalCents = order.totalCents,
+                    lines = linesByOrder[order.id].orEmpty().map { line ->
+                        ReportOrderLine(quantity = line.quantity, name = line.name)
+                    }
+                )
+            }
+
+        val cancelledOrders = orders
+            .filter { order ->
+                val normalizedStatus = order.status.lowercase(Locale.US)
+                normalizedStatus in setOf("void", "voided", "cancelled", "canceled", "refund", "refunded") &&
+                    order.createdAt >= windowStart && order.createdAt < windowEnd &&
+                    matchesSelectedCashier(order.shiftId)
+            }
+            .sortedBy { it.createdAt }
+            .map { order ->
+                ReportCancelledOrder(
+                    id = order.id,
+                    timestamp = order.createdAt,
+                    reason = order.voidReason ?: order.status,
+                    netCents = order.totalCents,
+                    grossCents = order.subtotalCents
+                )
+            }
 
         val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Manila"))
         val hourlySales = paidNonComplimentary
@@ -1561,7 +1631,6 @@ class ReportsRepository(
 
         val diff = totalEnding - expected
 
-        val empMap = employees.associateBy { it.id }
         val employeeBreakdowns = paid
             .groupBy { it.employeeId }
             .map { (empId, os) ->
@@ -1616,7 +1685,11 @@ class ReportsRepository(
                 it.createdAt >= windowStart && it.createdAt < windowEnd &&
                     (cashierEmployeeId == null || it.currentShiftId in filteredShiftIds)
             },
-            shifts = allShiftsInWindow
+            shifts = allShiftsInWindow,
+            processedOrders = processedOrders,
+            cancelledOrders = cancelledOrders,
+            taxRatePercent = settings?.taxRatePercent ?: 0.0,
+            taxCents = paidNonComplimentary.sumOf { it.taxCents }
         )
         }.flowOn(Dispatchers.Default)
     }

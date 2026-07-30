@@ -62,20 +62,65 @@
   };
   const row = (number, cells) => `<row r="${number}">${cells.join('')}</row>`;
   const money = cents => Number(cents || 0) / 100;
+  function formatReportDate(date) {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }).format(date);
+  }
+  function dateFromInput(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
+    return new Date(`${value}T00:00:00+08:00`);
+  }
+  function reportDateRangeLabel(days, generatedAt, customRange) {
+    const customStart = dateFromInput(customRange?.fromDate);
+    const customEnd = dateFromInput(customRange?.toDate);
+    if (customStart && customEnd) {
+      const start = formatReportDate(customStart);
+      const end = formatReportDate(customEnd);
+      return start === end ? start : `${start} - ${end}`;
+    }
+    const end = new Date(generatedAt);
+    const start = new Date(end);
+    start.setDate(start.getDate() - Math.max(Number(days) || 1, 1) + 1);
+    const startText = formatReportDate(start);
+    const endText = formatReportDate(end);
+    return startText === endText ? startText : `${startText} - ${endText}`;
+  }
+  function formatDateTime(value) {
+    const timestamp = Number(value);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+    const date = new Date(timestamp);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(date).reduce((map, part) => {
+      map[part.type] = part.value;
+      return map;
+    }, {});
+    return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute}`;
+  }
 
-  function makeWorksheet(stats, days, generatedAt) {
+  function makeWorksheet(stats, days, generatedAt, customRange) {
     const rows = [], merges = [];
     const addSection = (rowNumber, title) => {
       rows.push(row(rowNumber, [textCell(`A${rowNumber}`, title, 2)]));
-      merges.push(`A${rowNumber}:F${rowNumber}`);
+      merges.push(`A${rowNumber}:E${rowNumber}`);
     };
-    const dateLabel = Number(days) === 1 ? 'Today' : `Last ${days} Days`;
+    const dateLabel = reportDateRangeLabel(days, generatedAt, customRange);
     const dateText = `${generatedAt.getMonth() + 1}/${generatedAt.getDate()}/${generatedAt.getFullYear()} ` +
       `${String(generatedAt.getHours()).padStart(2, '0')}:${String(generatedAt.getMinutes()).padStart(2, '0')}`;
 
     rows.push(row(1, [textCell('A1', 'Kanlungan Coffee Garage POS - Daily Report', 1)]));
     rows.push(row(2, [textCell('A2', 'Clean export layout - Black & White only', 6)]));
-    merges.push('A1:F1', 'A2:F2');
+    merges.push('A1:E1', 'A2:E2');
     addSection(4, 'REPORT DETAILS');
     rows.push(row(5, [textCell('A5', 'Report Field', 3), textCell('B5', 'Value', 3)]));
     rows.push(row(6, [textCell('A6', 'Report Date Range', 4), textCell('B6', dateLabel, 4)]));
@@ -98,13 +143,13 @@
     }
 
     currentRow++;
-    addSection(currentRow, 'TOP SELLING ITEMS');
+    addSection(currentRow, 'ORDER SUMMARY');
     currentRow++;
-    rows.push(row(currentRow, [textCell(`A${currentRow}`, 'Item Name', 3), textCell(`B${currentRow}`, 'Quantity Sold', 3), textCell(`C${currentRow}`, 'Revenue', 3)]));
+    rows.push(row(currentRow, [textCell(`A${currentRow}`, 'Date/Time', 3), textCell(`B${currentRow}`, 'Cashier', 3), textCell(`C${currentRow}`, 'Payment Method', 3), textCell(`D${currentRow}`, 'Items', 3), textCell(`E${currentRow}`, 'Total', 3)]));
     currentRow++;
-    const topItems = stats.topItems?.length ? stats.topItems : [{ name: 'No items sold', qty: 0, revenue: 0 }];
-    for (const item of topItems) {
-      rows.push(row(currentRow, [textCell(`A${currentRow}`, item.name, 4), numberCell(`B${currentRow}`, item.qty, 5), numberCell(`C${currentRow}`, money(item.revenue), 5)]));
+    const orderSummary = stats.orderSummary?.length ? stats.orderSummary : [{ id: 'No paid orders', created_at: '', employee_name: '-', customer_name: '-', payment_method: 'Unavailable', items: '-', total_cents: 0 }];
+    for (const orderItem of orderSummary) {
+      rows.push(row(currentRow, [textCell(`A${currentRow}`, formatDateTime(orderItem.created_at), 4), textCell(`B${currentRow}`, orderItem.employee_name || '-', 4), textCell(`C${currentRow}`, orderItem.payment_method || 'Unavailable', 4), textCell(`D${currentRow}`, orderItem.items || '-', 4), numberCell(`E${currentRow}`, money(orderItem.total_cents), 5)]));
       currentRow++;
     }
 
@@ -126,15 +171,15 @@
     }
     currentRow++;
     rows.push(row(currentRow, [textCell(`A${currentRow}`, 'End of Daily Report', 6)]));
-    merges.push(`A${currentRow}:F${currentRow}`);
+    merges.push(`A${currentRow}:E${currentRow}`);
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:F${currentRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="28" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="6" width="14" customWidth="1"/></cols><sheetData>${rows.join('')}</sheetData><mergeCells count="${merges.length}">${merges.map(ref => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:E${currentRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="20" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="45" customWidth="1"/><col min="5" max="5" width="14" customWidth="1"/></cols><sheetData>${rows.join('')}</sheetData><mergeCells count="${merges.length}">${merges.map(ref => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells></worksheet>`;
   }
 
   const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="#,##0"/></numFmts><fonts count="3"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font><font><i/><sz val="10"/><color rgb="FF333333"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD9D9D9"/></left><right style="thin"><color rgb="FFD9D9D9"/></right><top style="thin"><color rgb="FFD9D9D9"/></top><bottom style="thin"><color rgb="FFD9D9D9"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="8"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 
-  function build(stats, days, generatedAt = new Date()) {
+  function build(stats, days, generatedAt = new Date(), customRange = null) {
     const iso = generatedAt.toISOString();
     return makeZip([
       { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
@@ -143,14 +188,14 @@
       { name: 'docProps/core.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>Kanlungan Coffee Garage POS</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${iso}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${iso}</dcterms:modified></cp:coreProperties>` },
       { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Daily Report" sheetId="1" r:id="rId1"/></sheets></workbook>` },
       { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-      { name: 'xl/styles.xml', data: styles }, { name: 'xl/worksheets/sheet1.xml', data: makeWorksheet(stats, days, generatedAt) }
+      { name: 'xl/styles.xml', data: styles }, { name: 'xl/worksheets/sheet1.xml', data: makeWorksheet(stats, days, generatedAt, customRange) }
     ], generatedAt);
   }
 
-  function download(stats, days) {
+  function download(stats, days, customRange = null) {
     const now = new Date(), link = document.createElement('a');
     const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    link.href = URL.createObjectURL(build(stats, days, now));
+    link.href = URL.createObjectURL(build(stats, days, now, customRange));
     link.download = `POS_Report_${Number(days) === 1 ? 'Today' : `Last_${days}_Days`}_${date}.xlsx`;
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);

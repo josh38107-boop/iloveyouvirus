@@ -104,6 +104,8 @@ import com.kape.coffeepos.data.MenuItem
 import com.kape.coffeepos.data.ModifierGroup
 import com.kape.coffeepos.data.ModifierOption
 import com.kape.coffeepos.data.PaymentCategories
+import com.kape.coffeepos.data.filterOrdersForBusinessDateRange
+import com.kape.coffeepos.data.groupOrdersByBusinessDate
 import com.kape.coffeepos.printer.PrinterDevice
 import com.kape.coffeepos.printer.PRINTER_INTERFACE_BLUETOOTH
 import com.kape.coffeepos.printer.PRINTER_INTERFACE_WINDOWS_BRIDGE
@@ -2014,34 +2016,19 @@ private fun OrdersScreen(state: PosUiState, viewModel: PosViewModel) {
         }
     }
 
-    val filteredOrders = remember(state.orders, state.orderDateRange, state.orderCustomStart, state.orderCustomEnd) {
-        val now = System.currentTimeMillis()
-        var windowEnd = Long.MAX_VALUE
-        val windowStart: Long = when (state.orderDateRange) {
-            ReportDateRange.TODAY -> {
-                val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Manila"))
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
-                cal.set(java.util.Calendar.MINUTE, 0)
-                cal.set(java.util.Calendar.SECOND, 0)
-                cal.set(java.util.Calendar.MILLISECOND, 0)
-                cal.timeInMillis
-            }
-            ReportDateRange.MONTH -> now - 30L * 24 * 60 * 60 * 1000
-            ReportDateRange.ALL   -> 0L
-            ReportDateRange.CUSTOM -> {
-                windowEnd = state.orderCustomEnd ?: Long.MAX_VALUE
-                state.orderCustomStart ?: 0L
-            }
-        }
-        state.orders.filter { it.createdAt in windowStart..windowEnd }
+    val orderCutoffMinutes = state.settings.businessDayCutoffMinutes
+    val filteredOrders = remember(state.orders, state.orderDateRange, state.orderCustomStart, state.orderCustomEnd, orderCutoffMinutes) {
+        filterOrdersForBusinessDateRange(
+            orders = state.orders,
+            dateRange = state.orderDateRange,
+            customStart = state.orderCustomStart,
+            customEnd = state.orderCustomEnd,
+            cutoffMinutes = orderCutoffMinutes
+        )
     }
 
-    val groupedOrders = remember(filteredOrders) {
-        val sdf = SimpleDateFormat("M/d/yyyy", Locale.US)
-        sdf.timeZone = java.util.TimeZone.getTimeZone("Asia/Manila")
-        filteredOrders.groupBy { order ->
-            sdf.format(Date(order.createdAt))
-        }
+    val groupedOrders = remember(filteredOrders, orderCutoffMinutes) {
+        groupOrdersByBusinessDate(filteredOrders, orderCutoffMinutes)
     }
 
     // PIN Authorization Dialog — shown for all users (cashier + manager)

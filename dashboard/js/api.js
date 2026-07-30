@@ -1,12 +1,12 @@
 // API client for all backend calls
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
   ? 'http://localhost:3000' 
-  : window.location.origin;
+  : 'https://kanlungan-coffee-api.onrender.com';
 
 async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {})
@@ -35,6 +35,7 @@ const api = {
     return apiFetch(`/admin/sales?days=${days}`);
   },
   getOrders: (limit = 50, offset = 0) => apiFetch(`/admin/orders?limit=${limit}&offset=${offset}`),
+  getOrder: (id) => apiFetch(`/admin/orders/${encodeURIComponent(id)}`),
   getHappenings: (start, end) => {
     const params = new URLSearchParams();
     if (start && end && /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end)) {

@@ -596,7 +596,7 @@ app.put('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
     const { days, fromMs, toMs } = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
-    const [summaryRes, topItemsRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
+    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
@@ -619,13 +619,110 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
             COALESCE(discount_category, ''), COALESCE(discount_cents, 0),
             device_id, id
         )
-        SELECT name, SUM(quantity) as qty,
-               COALESCE(SUM(ol.quantity * ol.unit_price_cents - COALESCE(ol.discount_cents, 0)), 0) as revenue
-        FROM deduped_order_line ol
-        JOIN pos_order o ON o.id = ol.order_id
+        ,
+        deduped_payment AS (
+          SELECT DISTINCT ON (
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at
+          ) *
+          FROM payment
+          ORDER BY
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at,
+            device_id, id
+        ),
+        item_totals AS (
+          SELECT ol.name, SUM(ol.quantity) as qty,
+                 COALESCE(SUM(ol.quantity * ol.unit_price_cents - COALESCE(ol.discount_cents, 0)), 0) as revenue
+          FROM deduped_order_line ol
+          JOIN pos_order o ON o.id = ol.order_id
+          WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
+            AND ${nonComplimentaryOrderPredicate('o')}
+          GROUP BY ol.name
+        ),
+        item_payment_modes AS (
+          SELECT ol.name,
+                 BOOL_OR(UPPER(COALESCE(p.payment_category, '')) = 'CASH'
+                   OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) = 'cash')) as has_cash,
+                 BOOL_OR(UPPER(COALESCE(p.payment_category, '')) = 'ONLINE'
+                   OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) IN ('online', 'gcash'))) as has_online
+          FROM deduped_order_line ol
+          JOIN pos_order o ON o.id = ol.order_id
+          LEFT JOIN deduped_payment p ON p.order_id = o.id
+          WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
+            AND ${nonComplimentaryOrderPredicate('o')}
+          GROUP BY ol.name
+        )
+        SELECT t.name, t.qty, t.revenue,
+               CASE
+                 WHEN COALESCE(m.has_cash, false) AND COALESCE(m.has_online, false) THEN 'Cash + Online'
+                 WHEN COALESCE(m.has_cash, false) THEN 'Cash'
+                 WHEN COALESCE(m.has_online, false) THEN 'Online'
+                 ELSE 'Unavailable'
+               END as payment_method
+        FROM item_totals t
+        LEFT JOIN item_payment_modes m ON m.name = t.name
+        ORDER BY t.qty DESC
+      `, [fromMs, toMs]),
+      db.query(`
+        WITH deduped_order_line AS (
+          SELECT DISTINCT ON (
+            order_id, item_id, name, quantity, unit_price_cents,
+            COALESCE(modifiers::text, ''), COALESCE(notes, ''),
+            COALESCE(discount_category, ''), COALESCE(discount_cents, 0)
+          ) *
+          FROM order_line
+          ORDER BY
+            order_id, item_id, name, quantity, unit_price_cents,
+            COALESCE(modifiers::text, ''), COALESCE(notes, ''),
+            COALESCE(discount_category, ''), COALESCE(discount_cents, 0),
+            device_id, id
+        ),
+        deduped_payment AS (
+          SELECT DISTINCT ON (
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at
+          ) *
+          FROM payment
+          ORDER BY
+            order_id, method, COALESCE(payment_category, ''), amount_cents,
+            COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at,
+            device_id, id
+        ),
+        order_items AS (
+          SELECT order_id,
+                 STRING_AGG(quantity || 'x ' || name, ', ' ORDER BY name) as items
+          FROM deduped_order_line
+          GROUP BY order_id
+        ),
+        order_payment_modes AS (
+          SELECT order_id,
+                 BOOL_OR(UPPER(COALESCE(payment_category, '')) = 'CASH'
+                   OR (COALESCE(payment_category, '') = '' AND LOWER(method) = 'cash')) as has_cash,
+                 BOOL_OR(UPPER(COALESCE(payment_category, '')) = 'ONLINE'
+                   OR (COALESCE(payment_category, '') = '' AND LOWER(method) IN ('online', 'gcash'))) as has_online
+          FROM deduped_payment
+          GROUP BY order_id
+        )
+        SELECT o.id,
+               o.created_at,
+               COALESCE(e.name, '-') as employee_name,
+               COALESCE(NULLIF(o.customer_name, ''), '-') as customer_name,
+               CASE
+                 WHEN COALESCE(pm.has_cash, false) AND COALESCE(pm.has_online, false) THEN 'Cash + Online'
+                 WHEN COALESCE(pm.has_cash, false) THEN 'Cash'
+                 WHEN COALESCE(pm.has_online, false) THEN 'Online'
+                 ELSE 'Unavailable'
+               END as payment_method,
+               COALESCE(oi.items, '-') as items,
+               o.total_cents
+        FROM pos_order o
+        LEFT JOIN employee e ON e.id = o.employee_id
+        LEFT JOIN order_items oi ON oi.order_id = o.id
+        LEFT JOIN order_payment_modes pm ON pm.order_id = o.id
         WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
           AND ${nonComplimentaryOrderPredicate('o')}
-        GROUP BY name ORDER BY qty DESC
+        ORDER BY o.created_at DESC, o.id DESC
       `, [fromMs, toMs]),
       db.query(`
         WITH deduped_payment AS (
@@ -721,6 +818,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       grossSales: parseInt(summaryRes.rows[0].gross),
       netSales: parseInt(summaryRes.rows[0].net),
       topItems: topItemsRes.rows,
+      orderSummary: orderSummaryRes.rows,
       discountBreakdown: discountRes.rows,
       paymentBreakdown: payments,
       cashDrawer
@@ -745,6 +843,69 @@ app.get('/admin/sales', adminAuthenticate, async (req, res) => {
       GROUP BY date ORDER BY date
     `, [fromMs, toMs, cutoffMinutes * 60 * 1000]);
     res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/orders/:id — single order with line items and payments
+app.get('/admin/orders/:id', adminAuthenticate, async (req, res) => {
+  try {
+    const orderRes = await db.query(`
+      SELECT o.*, e.name as employee_name
+      FROM pos_order o
+      LEFT JOIN employee e ON e.id = o.employee_id
+      WHERE o.id = $1
+      LIMIT 1
+    `, [req.params.id]);
+    const order = orderRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    const linesRes = await db.query(`
+      WITH deduped_order_line AS (
+        SELECT DISTINCT ON (
+          order_id, item_id, name, quantity, unit_price_cents,
+          COALESCE(modifiers::text, '[]'), COALESCE(notes, ''),
+          COALESCE(discount_category, ''), discount_cents
+        )
+          device_id, id, order_id, item_id, name, quantity, unit_price_cents,
+          modifiers, notes, discount_category, discount_cents
+        FROM order_line
+        WHERE order_id = $1
+        ORDER BY order_id, item_id, name, quantity, unit_price_cents,
+          COALESCE(modifiers::text, '[]'), COALESCE(notes, ''),
+          COALESCE(discount_category, ''), discount_cents, device_id, id
+      )
+      SELECT *, (quantity * unit_price_cents) - discount_cents AS line_total_cents
+      FROM deduped_order_line
+      ORDER BY name, id
+    `, [req.params.id]);
+
+    const paymentsRes = await db.query(`
+      WITH deduped_payment AS (
+        SELECT DISTINCT ON (
+          order_id, method, COALESCE(payment_category, ''), amount_cents,
+          COALESCE(amount_tendered_cents, -1), COALESCE(change_cents, -1), created_at
+        )
+          device_id, id, order_id, method, amount_cents, amount_tendered_cents,
+          change_cents, created_at, payment_category
+        FROM payment
+        WHERE order_id = $1
+        ORDER BY order_id, method, COALESCE(payment_category, ''), amount_cents,
+          COALESCE(amount_tendered_cents, -1), COALESCE(change_cents, -1), created_at,
+          device_id, id
+      )
+      SELECT * FROM deduped_payment
+      ORDER BY created_at, method
+    `, [req.params.id]);
+
+    const payments = paymentsRes.rows.map(row => ({
+      ...row,
+      payment_category: paymentCategory(row) || row.payment_category || null
+    }));
+    const paymentCategories = [...new Set(payments.map(p => p.payment_category).filter(Boolean))];
+
+    res.json({ order, lines: linesRes.rows, payments, payment_categories: paymentCategories });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

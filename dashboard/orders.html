@@ -7,6 +7,31 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css"/>
+  <style>
+    .order-row { cursor: pointer; }
+    .order-row:focus { outline: 3px solid var(--accent-light); outline-offset: -3px; background: var(--surface2); }
+    .order-modal { max-width: 760px; max-height: calc(100dvh - 48px); overflow-y: auto; }
+    .order-modal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .order-detail-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface2); }
+    .order-detail-label { color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .order-detail-value { color: var(--text); font-size: 14px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+    .order-modal-section { margin-top: 18px; }
+    .order-modal-section h3 { font-size: 13px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+    .order-item-row, .order-payment-row, .order-total-row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .order-item-row:last-child, .order-payment-row:last-child, .order-total-row:last-child { border-bottom: 0; }
+    .order-item-main { min-width: 0; }
+    .order-item-name { font-weight: 700; }
+    .order-item-meta, .order-payment-meta { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+    .order-line-price, .order-payment-price, .order-total-price { flex: 0 0 auto; font-weight: 700; color: var(--black); }
+    .order-total-row.grand { font-size: 16px; }
+    .order-total-row.grand .order-total-price { color: var(--accent2); }
+    .modal-close { min-width: 44px; min-height: 44px; border-radius: 8px; }
+    @media(max-width:700px) {
+      .modal-overlay { align-items: flex-end; padding: 0 10px; }
+      .order-modal { max-height: calc(100dvh - 16px); border-radius: 16px 16px 0 0; padding: 22px; }
+      .order-item-row, .order-payment-row, .order-total-row { align-items: flex-start; }
+    }
+  </style>
 </head>
 <body>
 <div class="layout">
@@ -68,15 +93,71 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="orderModal" role="dialog" aria-modal="true" aria-labelledby="orderModalTitle" aria-describedby="orderModalBody">
+  <div class="modal-card order-modal" role="document">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="orderModalTitle">Order Details</div>
+        <div class="card-sub" id="orderModalSubtitle">Selected transaction</div>
+      </div>
+      <button class="modal-close" type="button" onclick="closeOrderModal()" aria-label="Close order details">&times;</button>
+    </div>
+    <div id="orderModalBody" role="status" aria-live="polite">
+      <div class="loading"><div class="spinner"></div> Loading order details...</div>
+    </div>
+  </div>
+</div>
+
 <script src="js/auth.js"></script>
 <script src="js/api.js"></script>
 <script>
   requireAuth(); startClock();
   let page = 0; const PER_PAGE = 50;
+  let lastFocusedOrderRow = null;
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[char]);
+  }
+
+  function displayText(value, fallback = '&mdash;') {
+    const text = String(value ?? '').trim();
+    return text ? escapeHtml(text) : fallback;
+  }
+
+  function titleCase(value) {
+    const text = String(value ?? '').replace(/_/g, ' ').trim();
+    return text ? text.replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) : '';
+  }
+
+  function normalizePaymentCategory(payment) {
+    const category = String(payment?.payment_category || '').toUpperCase();
+    if (category === 'CASH' || category === 'ONLINE') return category;
+    const method = String(payment?.method || '').toLowerCase();
+    if (method === 'cash') return 'CASH';
+    if (method === 'online' || method === 'gcash') return 'ONLINE';
+    return '';
+  }
+
+  function paymentModeLabel(payments) {
+    const categories = [...new Set((payments || []).map(normalizePaymentCategory).filter(Boolean))];
+    if (categories.includes('CASH') && categories.includes('ONLINE')) return 'Cash + Online';
+    if (categories.includes('CASH')) return 'Cash';
+    if (categories.includes('ONLINE')) return 'Online';
+    return 'Payment method unavailable';
+  }
+
+  function formatModifiers(modifiers) {
+    if (!modifiers) return '';
+    let parsed = modifiers;
+    if (typeof modifiers === 'string') {
+      try { parsed = JSON.parse(modifiers); } catch (_) { return modifiers; }
+    }
+    if (!Array.isArray(parsed)) return '';
+    return parsed.map(mod => {
+      if (typeof mod === 'string') return mod;
+      return mod.name || mod.option_name || mod.label || '';
+    }).filter(Boolean).join(', ');
   }
 
   async function loadOrders() {
@@ -100,7 +181,7 @@
         const orderTimestamp = o.paid_at || o.created_at;
         const orderTimestampLabel = o.paid_at ? 'Paid time' : 'Created time';
         return `
-        <tr>
+        <tr class="order-row" tabindex="0" role="button" data-order-id="${escapeHtml(o.id)}" aria-label="View details for order ${escapeHtml(o.id)}">
           <td style="font-family:monospace;font-size:12px;color:var(--text-muted);">#${o.id.substring(0,12)}...</td>
           <td style="font-size:13px;">
             <strong>${formatDate(orderTimestamp)}</strong>
@@ -122,6 +203,102 @@
 
   function prevPage() { if (page > 0) { page--; loadOrders(); } }
   function nextPage() { page++; loadOrders(); }
+
+  function renderOrderDetails(data) {
+    const order = data.order || {};
+    const lines = data.lines || [];
+    const payments = data.payments || [];
+    const timestamp = order.paid_at || order.created_at;
+    const itemsHtml = lines.length ? lines.map(line => {
+      const modifiers = formatModifiers(line.modifiers);
+      const notes = String(line.notes || '').trim();
+      const discount = Number(line.discount_cents || 0) > 0 ? `Discount: ${formatPeso(line.discount_cents)}` : '';
+      const meta = [modifiers, notes, discount].filter(Boolean).map(escapeHtml).join(' &middot; ');
+      return `<div class="order-item-row">
+        <div class="order-item-main">
+          <div class="order-item-name">${Number(line.quantity || 0)}x ${displayText(line.name)}</div>
+          <div class="order-item-meta">${formatPeso(line.unit_price_cents || 0)} each${meta ? ` &middot; ${meta}` : ''}</div>
+        </div>
+        <div class="order-line-price">${formatPeso(line.line_total_cents ?? ((line.quantity || 0) * (line.unit_price_cents || 0) - (line.discount_cents || 0)))}</div>
+      </div>`;
+    }).join('') : '<div class="empty-state"><p>No order items found.</p></div>';
+
+    const paymentsHtml = payments.length ? payments.map(payment => {
+      const category = normalizePaymentCategory(payment);
+      const meta = [category ? titleCase(category) : '', formatDate(payment.created_at)].filter(Boolean).join(' &middot; ');
+      return `<div class="order-payment-row">
+        <div>
+          <div class="order-item-name">${displayText(payment.method)}</div>
+          <div class="order-payment-meta">${escapeHtml(meta || 'Payment details unavailable')}${payment.amount_tendered_cents != null ? ` &middot; Tendered ${formatPeso(payment.amount_tendered_cents)}` : ''}${payment.change_cents != null ? ` &middot; Change ${formatPeso(payment.change_cents)}` : ''}</div>
+        </div>
+        <div class="order-payment-price">${formatPeso(payment.amount_cents || 0)}</div>
+      </div>`;
+    }).join('') : '<div class="empty-state"><p>No payment records found.</p></div>';
+
+    document.getElementById('orderModalTitle').textContent = `Order #${String(order.id || '').substring(0, 12)}`;
+    document.getElementById('orderModalSubtitle').textContent = paymentModeLabel(payments);
+    document.getElementById('orderModalBody').innerHTML = `
+      <div class="order-modal-grid">
+        <div class="order-detail-box"><div class="order-detail-label">Customer</div><div class="order-detail-value">${displayText(order.customer_name)}</div></div>
+        <div class="order-detail-box"><div class="order-detail-label">Order Type</div><div class="order-detail-value">${displayText(titleCase(order.order_type || 'Dine-In'))}</div></div>
+        <div class="order-detail-box"><div class="order-detail-label">Employee</div><div class="order-detail-value">${displayText(order.employee_name)}</div></div>
+        <div class="order-detail-box"><div class="order-detail-label">Status</div><div class="order-detail-value">${displayText(titleCase(order.status))}</div></div>
+        <div class="order-detail-box"><div class="order-detail-label">Date & Time</div><div class="order-detail-value">${escapeHtml(formatDate(timestamp))}</div></div>
+        <div class="order-detail-box"><div class="order-detail-label">Payment Mode</div><div class="order-detail-value">${escapeHtml(paymentModeLabel(payments))}</div></div>
+      </div>
+      <div class="order-modal-section"><h3>Items Ordered</h3>${itemsHtml}</div>
+      <div class="order-modal-section"><h3>Payments</h3>${paymentsHtml}</div>
+      <div class="order-modal-section">
+        <h3>Totals</h3>
+        <div class="order-total-row"><span>Subtotal</span><span class="order-total-price">${formatPeso(order.subtotal_cents || 0)}</span></div>
+        <div class="order-total-row"><span>Discount</span><span class="order-total-price">-${formatPeso(order.discount_cents || 0)}</span></div>
+        <div class="order-total-row"><span>Tax</span><span class="order-total-price">${formatPeso(order.tax_cents || 0)}</span></div>
+        <div class="order-total-row"><span>Tip</span><span class="order-total-price">${formatPeso(order.tip_cents || 0)}</span></div>
+        <div class="order-total-row grand"><strong>Total</strong><span class="order-total-price">${formatPeso(order.total_cents || 0)}</span></div>
+      </div>`;
+  }
+
+  async function openOrderModal(orderId, trigger) {
+    lastFocusedOrderRow = trigger || document.activeElement;
+    const modal = document.getElementById('orderModal');
+    document.getElementById('orderModalTitle').textContent = `Order #${String(orderId).substring(0, 12)}`;
+    document.getElementById('orderModalSubtitle').textContent = 'Loading selected transaction';
+    document.getElementById('orderModalBody').innerHTML = '<div class="loading"><div class="spinner"></div> Loading order details...</div>';
+    modal.classList.add('active');
+    requestAnimationFrame(() => modal.querySelector('.modal-close').focus());
+    try {
+      renderOrderDetails(await api.getOrder(orderId));
+    } catch (err) {
+      document.getElementById('orderModalSubtitle').textContent = 'Unable to load order';
+      document.getElementById('orderModalBody').innerHTML = `<div class="empty-state"><p>${escapeHtml(err.message || 'Order details could not be loaded.')}</p></div>`;
+    }
+  }
+
+  function closeOrderModal() {
+    document.getElementById('orderModal').classList.remove('active');
+    if (lastFocusedOrderRow?.focus) lastFocusedOrderRow.focus();
+  }
+
+  document.getElementById('ordersTable').addEventListener('click', event => {
+    const row = event.target.closest('.order-row');
+    if (row) openOrderModal(row.dataset.orderId, row);
+  });
+
+  document.getElementById('ordersTable').addEventListener('keydown', event => {
+    const row = event.target.closest('.order-row');
+    if (row && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      openOrderModal(row.dataset.orderId, row);
+    }
+  });
+
+  document.getElementById('orderModal').addEventListener('click', event => {
+    if (event.target.id === 'orderModal') closeOrderModal();
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && document.getElementById('orderModal').classList.contains('active')) closeOrderModal();
+  });
 
   loadOrders();
 </script>
