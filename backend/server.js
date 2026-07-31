@@ -213,27 +213,17 @@ app.get('/admin/apk/latest/info', adminAuthenticate, (req, res) => {
   res.json(latestApkMetadata());
 });
 
-app.get('/admin/apk/latest', adminAuthenticate, async (req, res, next) => {
+app.get('/admin/apk/latest', adminAuthenticate, (req, res) => {
   const apkUrl = process.env.APK_DOWNLOAD_URL;
   if (!apkUrl) return res.status(404).json({ error: 'Latest APK is not configured' });
 
   try {
     const parsedUrl = new URL(apkUrl);
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('Unsupported APK URL protocol');
-
-    const upstream = await fetch(parsedUrl, { redirect: 'follow' });
-    if (!upstream.ok) return res.status(502).json({ error: 'Latest APK could not be downloaded' });
-
-    const apk = Buffer.from(await upstream.arrayBuffer());
-    if (!apk.length) return res.status(502).json({ error: 'Latest APK file is empty' });
-
-    res.setHeader('Content-Length', apk.length);
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', 'attachment; filename="coffeepos-latest.apk"');
-    res.send(apk);
+    return res.redirect(302, parsedUrl.toString());
   } catch (err) {
     console.error('GET /admin/apk/latest:', err.message);
-    return res.status(502).json({ error: 'Latest APK could not be downloaded. Check APK_DOWNLOAD_URL in Render.' });
+    return res.status(400).json({ error: 'Latest APK URL is invalid. Check APK_DOWNLOAD_URL in Render.' });
   }
 });
 
