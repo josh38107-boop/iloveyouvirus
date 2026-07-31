@@ -161,6 +161,8 @@ const api = {
     method: 'POST', body: JSON.stringify(item)
   }),
   getDevices: () => apiFetch('/admin/devices'),
+  getLatestApkInfo: () => apiFetch('/admin/apk/latest/info'),
+  latestApkUrl: () => `${API_BASE}/admin/apk/latest`,
   createEnrollment: (deviceName, role) => apiFetch('/admin/enrollments', {
     method: 'POST', body: JSON.stringify({ deviceName, role })
   }),

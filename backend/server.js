@@ -13,6 +13,7 @@ const { createPaymentVoidService } = require('./payment-void');
 const { createDataMaintenanceService } = require('./data-maintenance');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { Readable } = require('stream');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -200,6 +201,38 @@ app.use(express.static(path.join(__dirname, '..', 'dashboard')));
 
 const authenticate = cloud.legacyAuth;
 const adminAuthenticate = cloud.adminAuth;
+
+function latestApkMetadata() {
+  return {
+    configured: Boolean(process.env.APK_DOWNLOAD_URL),
+    versionName: process.env.APK_VERSION_NAME || null,
+    versionCode: process.env.APK_VERSION_CODE || null
+  };
+}
+
+app.get('/admin/apk/latest/info', adminAuthenticate, (req, res) => {
+  res.json(latestApkMetadata());
+});
+
+app.get('/admin/apk/latest', adminAuthenticate, async (req, res, next) => {
+  const apkUrl = process.env.APK_DOWNLOAD_URL;
+  if (!apkUrl) return res.status(404).json({ error: 'Latest APK is not configured' });
+
+  try {
+    const upstream = await fetch(apkUrl);
+    if (!upstream.ok || !upstream.body) {
+      return res.status(502).json({ error: 'Latest APK could not be downloaded' });
+    }
+
+    const contentLength = upstream.headers.get('content-length');
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="coffeepos-latest.apk"');
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+});
 
 async function requireCurrentResetGeneration(req, res, next) {
   try {
@@ -596,8 +629,9 @@ app.put('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
 // GET /admin/stats?days=1&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — report summary
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
+    await ensureHiddenActivityHistoryTable();
     const { days, fromMs, toMs } = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
-    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
+    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes, hiddenShiftRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
@@ -780,10 +814,16 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
           AND ${nonComplimentaryOrderPredicate('o')}
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
-      `, [fromMs, toMs])
+      `, [fromMs, toMs]),
+      db.query(`
+        SELECT event_id
+        FROM hidden_activity_history
+        WHERE event_id LIKE 'shift-open-%' OR event_id LIKE 'shift-close-%'
+      `)
     ]);
 
     const payments = paymentRes.rows;
+    const hiddenShiftEventIds = new Set((hiddenShiftRes.rows || []).map(row => row.event_id));
     const cashSales = payments
       .filter(row => paymentCategory(row) === 'CASH')
       .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
@@ -791,12 +831,15 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       .filter(row => paymentCategory(row) === 'ONLINE')
       .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
     const cashDrawer = shiftsRes.rows.reduce((totals, shift) => {
-      const starting = parseInt(shift.starting_cash_cents || 0);
+      const shiftId = String(shift.id);
+      const hideOpenCash = hiddenShiftEventIds.has(`shift-open-${shiftId}`);
+      const hideCloseCash = hiddenShiftEventIds.has(`shift-close-${shiftId}`);
+      const starting = hideOpenCash ? 0 : parseInt(shift.starting_cash_cents || 0);
       const added = parseInt(shift.cash_added_cents || 0);
       const removed = parseInt(shift.cash_removed_cents || 0);
       const shiftCashSales = parseInt(shift.cash_sales || 0);
       const expected = starting + shiftCashSales + added - removed;
-      const actual = shift.ending_cash_cents == null
+      const actual = shift.ending_cash_cents == null || hideCloseCash
         ? expected
         : parseInt(shift.ending_cash_cents || 0);
       totals.startingCash += starting;

@@ -6,6 +6,7 @@ const notice = document.getElementById('deviceNotice');
 const modal = document.getElementById('enrollmentModal');
 const form = document.getElementById('enrollmentForm');
 const result = document.getElementById('enrollmentResult');
+const apkVersion = document.getElementById('apkVersion');
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -52,6 +53,42 @@ async function loadDevices() {
   }
 }
 
+function renderApkVersion(info) {
+  if (!apkVersion || !info) return;
+  const label = info.versionName
+    ? `Latest APK: v${info.versionName}${info.versionCode ? ` (${info.versionCode})` : ''}`
+    : info.configured ? 'Latest APK is ready' : '';
+  apkVersion.textContent = label;
+  apkVersion.hidden = !label;
+}
+
+async function loadLatestApkInfo() {
+  try {
+    renderApkVersion(await api.getLatestApkInfo());
+  } catch {
+    renderApkVersion(null);
+  }
+}
+
+async function downloadLatestApk() {
+  const button = document.getElementById('downloadLatestApk');
+  button.disabled = true;
+  try {
+    const info = await api.getLatestApkInfo();
+    renderApkVersion(info);
+    if (!info?.configured) {
+      showNotice('Latest APK is not configured yet. Set APK_DOWNLOAD_URL in Render.', true);
+      return;
+    }
+    window.location.href = api.latestApkUrl();
+    showNotice('Latest APK download started.');
+  } catch (error) {
+    showNotice(error.message || 'Latest APK download failed.', true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function openModal() {
   form.hidden = false; result.hidden = true; form.reset(); modal.classList.add('active');
   setTimeout(() => document.getElementById('deviceName').focus(), 50);
@@ -62,6 +99,7 @@ document.getElementById('openEnrollment').addEventListener('click', openModal);
 document.getElementById('closeEnrollment').addEventListener('click', closeModal);
 document.getElementById('cancelEnrollment').addEventListener('click', closeModal);
 document.getElementById('refreshDevices').addEventListener('click', loadDevices);
+document.getElementById('downloadLatestApk').addEventListener('click', downloadLatestApk);
 modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(); });
 
 form.addEventListener('submit', async (event) => {
@@ -99,4 +137,5 @@ rows.addEventListener('click', async (event) => {
   finally { button.disabled = false; }
 });
 
+loadLatestApkInfo();
 loadDevices();

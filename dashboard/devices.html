@@ -43,7 +43,11 @@
     <div class="content fade-up">
       <section class="device-summary" aria-label="Synchronization summary">
         <div><span class="status-indicator" aria-hidden="true"></span><strong>Render Cloud is the source of truth</strong><p>Enrollment codes expire after 10 minutes and can only be used once.</p></div>
-        <button class="btn btn-primary" id="openEnrollment">Enroll a device</button>
+        <div class="device-summary-actions">
+          <div class="apk-version" id="apkVersion" hidden></div>
+          <button class="btn btn-outline" id="downloadLatestApk">Download latest APK</button>
+          <button class="btn btn-primary" id="openEnrollment">Enroll a device</button>
+        </div>
       </section>
 
       <section class="card">

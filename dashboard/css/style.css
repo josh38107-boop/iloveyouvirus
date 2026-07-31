@@ -306,6 +306,8 @@ body {
 
 /* Render Cloud device management */
 .device-summary { display:flex; align-items:center; justify-content:space-between; gap:24px; background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 24px; margin-bottom:20px; }
+.device-summary-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+.apk-version { flex-basis:100%; color:var(--text-muted); font-size:12px; text-align:right; }
 .nav-icon svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; vertical-align:middle; }
 .device-summary p, .device-help { margin:4px 0 0; color:var(--text-muted); font-size:13px; }
 .status-indicator { display:inline-block; width:9px; height:9px; margin-right:8px; border-radius:50%; background:#2e9d65; box-shadow:0 0 0 4px rgba(46,157,101,.12); }
@@ -321,4 +323,4 @@ body {
 .device-notice { min-height:22px; padding-top:10px; color:#23784d; font-size:13px; }
 .device-notice.error { color:var(--danger); }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-@media (max-width:700px) { .device-summary { align-items:flex-start; flex-direction:column; } .device-summary .btn { width:100%; } }
+@media (max-width:700px) { .device-summary { align-items:flex-start; flex-direction:column; } .device-summary-actions, .device-summary .btn { width:100%; } .apk-version { text-align:left; } }
