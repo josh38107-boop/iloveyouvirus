@@ -11,13 +11,15 @@ const devicesScript = fs.readFileSync(path.join(root, 'dashboard', 'js', 'device
 const api = fs.readFileSync(path.join(root, 'dashboard', 'js', 'api.js'), 'utf8');
 const envExample = fs.readFileSync(path.join(root, 'backend', '.env.example'), 'utf8');
 
-test('APK download backend route is admin protected and streams an APK attachment', () => {
+test('APK download backend route is admin protected and sends an APK attachment', () => {
   assert.match(server, /app\.get\('\/admin\/apk\/latest', adminAuthenticate/);
   assert.match(server, /process\.env\.APK_DOWNLOAD_URL/);
   assert.match(server, /Latest APK is not configured/);
+  assert.match(server, /new URL\(apkUrl\)/);
+  assert.match(server, /Latest APK could not be downloaded\. Check APK_DOWNLOAD_URL in Render\./);
   assert.match(server, /Content-Type', 'application\/vnd\.android\.package-archive'/);
   assert.match(server, /Content-Disposition', 'attachment; filename="coffeepos-latest\.apk"'/);
-  assert.match(server, /Readable\.fromWeb\(upstream\.body\)\.pipe\(res\)/);
+  assert.match(server, /res\.send\(apk\)/);
 });
 
 test('APK metadata endpoint exposes optional Render env configuration', () => {

@@ -13,7 +13,6 @@ const { createPaymentVoidService } = require('./payment-void');
 const { createDataMaintenanceService } = require('./data-maintenance');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { Readable } = require('stream');
 
 process.env.TOKEN_PEPPER = process.env.TOKEN_PEPPER || 'KapeTokenPepper2024SecretKey';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'KapeSessionSecret2024KeySecret';
@@ -219,18 +218,22 @@ app.get('/admin/apk/latest', adminAuthenticate, async (req, res, next) => {
   if (!apkUrl) return res.status(404).json({ error: 'Latest APK is not configured' });
 
   try {
-    const upstream = await fetch(apkUrl);
-    if (!upstream.ok || !upstream.body) {
-      return res.status(502).json({ error: 'Latest APK could not be downloaded' });
-    }
+    const parsedUrl = new URL(apkUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('Unsupported APK URL protocol');
 
-    const contentLength = upstream.headers.get('content-length');
-    if (contentLength) res.setHeader('Content-Length', contentLength);
+    const upstream = await fetch(parsedUrl, { redirect: 'follow' });
+    if (!upstream.ok) return res.status(502).json({ error: 'Latest APK could not be downloaded' });
+
+    const apk = Buffer.from(await upstream.arrayBuffer());
+    if (!apk.length) return res.status(502).json({ error: 'Latest APK file is empty' });
+
+    res.setHeader('Content-Length', apk.length);
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
     res.setHeader('Content-Disposition', 'attachment; filename="coffeepos-latest.apk"');
-    Readable.fromWeb(upstream.body).pipe(res);
+    res.send(apk);
   } catch (err) {
-    next(err);
+    console.error('GET /admin/apk/latest:', err.message);
+    return res.status(502).json({ error: 'Latest APK could not be downloaded. Check APK_DOWNLOAD_URL in Render.' });
   }
 });
 
