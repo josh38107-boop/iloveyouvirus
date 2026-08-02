@@ -804,44 +804,6 @@ class OrderRepository(
             tableNumber = tableNumber?.ifBlank { null },
             orderType = orderType
         )
-        orderDao.insertOrder(order)
-        orderDao.insertLines(
-            lines.map {
-                val lineDiscount = appliedItemDiscount?.takeIf { selection ->
-                    selection.scope == "item" && selection.cartLineId == it.id
-                }
-                OrderLine(
-                    orderId = orderId,
-                    itemId = it.item.id,
-                    name = it.item.name,
-                    quantity = it.quantity,
-                    unitPriceCents = it.unitPriceCents,
-                    modifiers = it.modifierLabel,
-                    notes = it.notes,
-                    discountCategory = lineDiscount?.category,
-                    discountCents = lineDiscount?.discountCents ?: 0
-                )
-            }
-        )
-        orderDao.insertPayment(
-            Payment(
-                orderId = orderId,
-                method = paymentMethod,
-                amountCents = if (isComp) 0 else totals.totalCents,
-                amountTenderedCents = if (isComp) 0 else amountTenderedCents,
-                changeCents = if (isComp) 0 else changeCents,
-                createdAt = now,
-                paymentCategory = paymentCategory
-            )
-        )
-        orderDao.insertReceipt(
-            Receipt(
-                orderId = orderId,
-                receiptNumber = orderId.take(8).uppercase(Locale.US),
-                text = buildReceipt(settings, order, lines, appliedItemDiscount, paymentMethod, amountTenderedCents, changeCents, lineCharacters),
-                createdAt = now
-            )
-        )
         val exclusionsByItemId = if (paymentMethod == "Complimentary") {
             menuDao.itemsNow().associate { item ->
                 item.id to item.complementaryExclusions.split(",").filter { it.isNotBlank() }.toSet()
@@ -849,12 +811,52 @@ class OrderRepository(
         } else {
             emptyMap()
         }
-        inventoryRepository.deductFor(
-            lines = lines,
-            isComplimentary = (paymentMethod == "Complimentary"),
-            exclusionsByItemId = exclusionsByItemId,
-            isDineIn = (orderType == "Dine-In")
-        )
+        database.withTransaction {
+            orderDao.insertOrder(order)
+            orderDao.insertLines(
+                lines.map {
+                    val lineDiscount = appliedItemDiscount?.takeIf { selection ->
+                        selection.scope == "item" && selection.cartLineId == it.id
+                    }
+                    OrderLine(
+                        orderId = orderId,
+                        itemId = it.item.id,
+                        name = it.item.name,
+                        quantity = it.quantity,
+                        unitPriceCents = it.unitPriceCents,
+                        modifiers = it.modifierLabel,
+                        notes = it.notes,
+                        discountCategory = lineDiscount?.category,
+                        discountCents = lineDiscount?.discountCents ?: 0
+                    )
+                }
+            )
+            orderDao.insertPayment(
+                Payment(
+                    orderId = orderId,
+                    method = paymentMethod,
+                    amountCents = if (isComp) 0 else totals.totalCents,
+                    amountTenderedCents = if (isComp) 0 else amountTenderedCents,
+                    changeCents = if (isComp) 0 else changeCents,
+                    createdAt = now,
+                    paymentCategory = paymentCategory
+                )
+            )
+            orderDao.insertReceipt(
+                Receipt(
+                    orderId = orderId,
+                    receiptNumber = orderId.take(8).uppercase(Locale.US),
+                    text = buildReceipt(settings, order, lines, appliedItemDiscount, paymentMethod, amountTenderedCents, changeCents, lineCharacters),
+                    createdAt = now
+                )
+            )
+            inventoryRepository.deductFor(
+                lines = lines,
+                isComplimentary = (paymentMethod == "Complimentary"),
+                exclusionsByItemId = exclusionsByItemId,
+                isDineIn = (orderType == "Dine-In")
+            )
+        }
         syncManager?.let { sm ->
             CoroutineScope(Dispatchers.IO).launch {
                 sm.syncNow()
@@ -915,63 +917,65 @@ class OrderRepository(
             tableNumber = tableNumber?.ifBlank { null },
             orderType = orderType
         )
-        orderDao.insertOrder(order)
-        orderDao.insertLines(
-            lines.map {
-                val lineDiscount = appliedItemDiscount?.takeIf { selection ->
-                    selection.scope == "item" && selection.cartLineId == it.id
+        database.withTransaction {
+            orderDao.insertOrder(order)
+            orderDao.insertLines(
+                lines.map {
+                    val lineDiscount = appliedItemDiscount?.takeIf { selection ->
+                        selection.scope == "item" && selection.cartLineId == it.id
+                    }
+                    OrderLine(
+                        orderId = orderId,
+                        itemId = it.item.id,
+                        name = it.item.name,
+                        quantity = it.quantity,
+                        unitPriceCents = it.unitPriceCents,
+                        modifiers = it.modifierLabel,
+                        notes = it.notes,
+                        discountCategory = lineDiscount?.category,
+                        discountCents = lineDiscount?.discountCents ?: 0
+                    )
                 }
-                OrderLine(
-                    orderId = orderId,
-                    itemId = it.item.id,
-                    name = it.item.name,
-                    quantity = it.quantity,
-                    unitPriceCents = it.unitPriceCents,
-                    modifiers = it.modifierLabel,
-                    notes = it.notes,
-                    discountCategory = lineDiscount?.category,
-                    discountCents = lineDiscount?.discountCents ?: 0
+            )
+            if (gcashPaymentAmount > 0) {
+                orderDao.insertPayment(
+                    Payment(
+                        orderId = orderId,
+                        method = "Online",
+                        amountCents = gcashPaymentAmount,
+                        amountTenderedCents = gcashAmountCents,
+                        changeCents = 0,
+                        createdAt = now,
+                        paymentCategory = PaymentCategories.ONLINE
+                    )
                 )
             }
-        )
-        if (gcashPaymentAmount > 0) {
-            orderDao.insertPayment(
-                Payment(
+            if (cashPaymentAmount > 0 || (gcashPaymentAmount == 0 && cashAmountCents > 0)) {
+                orderDao.insertPayment(
+                    Payment(
+                        orderId = orderId,
+                        method = "Cash",
+                        amountCents = cashPaymentAmount,
+                        amountTenderedCents = cashAmountCents,
+                        changeCents = cashChange,
+                        createdAt = now,
+                        paymentCategory = PaymentCategories.CASH
+                    )
+                )
+            }
+            orderDao.insertReceipt(
+                Receipt(
                     orderId = orderId,
-                    method = "Online",
-                    amountCents = gcashPaymentAmount,
-                    amountTenderedCents = gcashAmountCents,
-                    changeCents = 0,
-                    createdAt = now,
-                    paymentCategory = PaymentCategories.ONLINE
+                    receiptNumber = orderId.take(8).uppercase(Locale.US),
+                    text = buildReceiptSplit(settings, order, lines, appliedItemDiscount, cashAmountCents, cashChange, gcashAmountCents, now, lineCharacters),
+                    createdAt = now
                 )
             )
-        }
-        if (cashPaymentAmount > 0 || (gcashPaymentAmount == 0 && cashAmountCents > 0)) {
-            orderDao.insertPayment(
-                Payment(
-                    orderId = orderId,
-                    method = "Cash",
-                    amountCents = cashPaymentAmount,
-                    amountTenderedCents = cashAmountCents,
-                    changeCents = cashChange,
-                    createdAt = now,
-                    paymentCategory = PaymentCategories.CASH
-                )
+            inventoryRepository.deductFor(
+                lines = lines,
+                isDineIn = (orderType == "Dine-In")
             )
         }
-        orderDao.insertReceipt(
-            Receipt(
-                orderId = orderId,
-                receiptNumber = orderId.take(8).uppercase(Locale.US),
-            text = buildReceiptSplit(settings, order, lines, appliedItemDiscount, cashAmountCents, cashChange, gcashAmountCents, now, lineCharacters),
-                createdAt = now
-            )
-        )
-        inventoryRepository.deductFor(
-            lines = lines,
-            isDineIn = (orderType == "Dine-In")
-        )
         syncManager?.let { sm ->
             CoroutineScope(Dispatchers.IO).launch {
                 sm.syncNow()

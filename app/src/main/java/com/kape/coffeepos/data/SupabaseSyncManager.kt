@@ -85,6 +85,13 @@ internal fun shouldApplyRemoteOrderTypeCorrection(
     remoteOrderType: String
 ): Boolean = isDownloadedRemoteOrder && localOrderType != remoteOrderType
 
+internal fun shouldRepairDownloadedOrderChildren(
+    isDownloadedRemoteOrder: Boolean,
+    hasLocalLines: Boolean,
+    hasLocalPayments: Boolean,
+    hasLocalReceipt: Boolean
+): Boolean = isDownloadedRemoteOrder && (!hasLocalLines || !hasLocalPayments || !hasLocalReceipt)
+
 internal fun remoteLong(value: Any?, field: String): Long = when (value) {
     is Number -> value.toLong()
     is String -> value.toLongOrNull()
@@ -1777,14 +1784,24 @@ class SupabaseSyncManager(
                 downloadOrderLines(oId)
                 downloadPayments(oId)
                 downloadReceipt(oId)
-            } else if (localOrder.status != status) {
-                val isLocalTerminal = localOrder.status == "void" || localOrder.status == "refunded"
-                val isRemoteTerminal = status == "void" || status == "refunded"
-                if (!isLocalTerminal && isRemoteTerminal) {
-                    db.orderDao().insertOrder(remoteOrder)
-                    markDownloadedRemoteOrder(oId)
-                    downloadPayments(oId)
-                    downloadReceipt(oId)
+            } else {
+                repairDownloadedOrderChildren(oId)
+                if (localOrder.status != status) {
+                    val isLocalTerminal = localOrder.status == "void" || localOrder.status == "refunded"
+                    val isRemoteTerminal = status == "void" || status == "refunded"
+                    if (!isLocalTerminal && isRemoteTerminal) {
+                        db.orderDao().insertOrder(remoteOrder)
+                        markDownloadedRemoteOrder(oId)
+                        downloadPayments(oId)
+                        downloadReceipt(oId)
+                    } else if (shouldApplyRemoteOrderTypeCorrection(
+                            isDownloadedRemoteOrder = isDownloadedRemoteOrder(oId),
+                            localOrderType = localOrder.orderType,
+                            remoteOrderType = orderType
+                        )
+                    ) {
+                        db.orderDao().insertOrder(localOrder.copy(orderType = orderType))
+                    }
                 } else if (shouldApplyRemoteOrderTypeCorrection(
                         isDownloadedRemoteOrder = isDownloadedRemoteOrder(oId),
                         localOrderType = localOrder.orderType,
@@ -1793,14 +1810,28 @@ class SupabaseSyncManager(
                 ) {
                     db.orderDao().insertOrder(localOrder.copy(orderType = orderType))
                 }
-            } else if (shouldApplyRemoteOrderTypeCorrection(
-                    isDownloadedRemoteOrder = isDownloadedRemoteOrder(oId),
-                    localOrderType = localOrder.orderType,
-                    remoteOrderType = orderType
-                )
-            ) {
-                db.orderDao().insertOrder(localOrder.copy(orderType = orderType))
             }
+        }
+    }
+
+    private suspend fun repairDownloadedOrderChildren(orderId: String) {
+        if (!shouldRepairDownloadedOrderChildren(
+                isDownloadedRemoteOrder = isDownloadedRemoteOrder(orderId),
+                hasLocalLines = db.orderDao().orderLinesForOrder(orderId).isNotEmpty(),
+                hasLocalPayments = db.orderDao().paymentsForOrder(orderId).isNotEmpty(),
+                hasLocalReceipt = db.orderDao().receipt(orderId) != null
+            )
+        ) {
+            return
+        }
+        if (db.orderDao().orderLinesForOrder(orderId).isEmpty()) {
+            downloadOrderLines(orderId)
+        }
+        if (db.orderDao().paymentsForOrder(orderId).isEmpty()) {
+            downloadPayments(orderId)
+        }
+        if (db.orderDao().receipt(orderId) == null) {
+            downloadReceipt(orderId)
         }
     }
 

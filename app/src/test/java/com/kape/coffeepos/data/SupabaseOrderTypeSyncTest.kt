@@ -75,4 +75,40 @@ class SupabaseOrderTypeSyncTest {
             )
         )
     }
+
+    @Test
+    fun downloadedOrderMissingPaymentRequestsChildRepair() {
+        assertTrue(
+            shouldRepairDownloadedOrderChildren(
+                isDownloadedRemoteOrder = true,
+                hasLocalLines = true,
+                hasLocalPayments = false,
+                hasLocalReceipt = true
+            )
+        )
+    }
+
+    @Test
+    fun downloadedOrderWithCompleteChildrenDoesNotRepairAgain() {
+        assertFalse(
+            shouldRepairDownloadedOrderChildren(
+                isDownloadedRemoteOrder = true,
+                hasLocalLines = true,
+                hasLocalPayments = true,
+                hasLocalReceipt = true
+            )
+        )
+    }
+
+    @Test
+    fun locallyCreatedOrderDoesNotUseRemoteChildRepair() {
+        assertFalse(
+            shouldRepairDownloadedOrderChildren(
+                isDownloadedRemoteOrder = false,
+                hasLocalLines = true,
+                hasLocalPayments = false,
+                hasLocalReceipt = true
+            )
+        )
+    }
 }
