@@ -43,6 +43,19 @@ test('website stats expose duplicate-safe order summary rows', () => {
   assert.match(server, /WHERE o\.created_at >= \$1 AND o\.created_at < \$2 AND o\.status = 'paid'[\s\S]*?AND \$\{nonComplimentaryOrderPredicate\('o'\)\}/);
 });
 
+test('website report cash drawer excludes hidden Activity History shift cash entries', () => {
+  assert.match(server, /await ensureHiddenActivityHistoryTable\(\);/);
+  assert.match(server, /hiddenShiftRes/);
+  assert.match(server, /FROM hidden_activity_history/);
+  assert.match(server, /event_id LIKE 'shift-open-%' OR event_id LIKE 'shift-close-%'/);
+  assert.match(server, /hiddenShiftEventIds = new Set/);
+  assert.match(server, /hideOpenCash = hiddenShiftEventIds\.has\(`shift-open-\$\{shiftId\}`\)/);
+  assert.match(server, /hideCloseCash/);
+  assert.match(server, /if \(hideOpenCash \|\| hideCloseCash\) return totals;/);
+  assert.doesNotMatch(server, /const starting = hideOpenCash \? 0 : parseInt\(shift\.starting_cash_cents \|\| 0\)/);
+  assert.doesNotMatch(server, /shift\.ending_cash_cents == null \|\| hideCloseCash/);
+});
+
 test('website report sales metrics exclude complimentary paid orders', () => {
   assert.match(server, /function nonComplimentaryOrderPredicate\(orderAlias\)/);
   assert.match(server, /LOWER\(complimentary_payment\.method\) = 'complimentary'/);

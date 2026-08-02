@@ -827,12 +827,13 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       const shiftId = String(shift.id);
       const hideOpenCash = hiddenShiftEventIds.has(`shift-open-${shiftId}`);
       const hideCloseCash = hiddenShiftEventIds.has(`shift-close-${shiftId}`);
-      const starting = hideOpenCash ? 0 : parseInt(shift.starting_cash_cents || 0);
+      if (hideOpenCash || hideCloseCash) return totals;
+      const starting = parseInt(shift.starting_cash_cents || 0);
       const added = parseInt(shift.cash_added_cents || 0);
       const removed = parseInt(shift.cash_removed_cents || 0);
       const shiftCashSales = parseInt(shift.cash_sales || 0);
       const expected = starting + shiftCashSales + added - removed;
-      const actual = shift.ending_cash_cents == null || hideCloseCash
+      const actual = shift.ending_cash_cents == null
         ? expected
         : parseInt(shift.ending_cash_cents || 0);
       totals.startingCash += starting;
