@@ -34,4 +34,78 @@ class RemoteNumberParsingTest {
         }
         assertTrue(discountError.message.orEmpty().contains("pos_order.discount_percent"))
     }
+
+    @Test
+    fun parsesRemoteInventoryAddOnNumbers() {
+        val parsed = orderInventoryAddOnFromRemote(
+            mapOf(
+                "id" to "addon-1",
+                "order_id" to "order-1",
+                "ingredient_id" to "cup",
+                "quantity" to 2.5,
+                "created_at" to 1_000L,
+                "updated_at" to 1_100L,
+                "restored_at" to null
+            ),
+            local = null
+        )
+
+        assertEquals(2.5, parsed.quantity, 0.0)
+        assertEquals(1_000L, parsed.createdAt)
+        assertEquals(1_100L, parsed.updatedAt)
+        assertNull(parsed.restoredAt)
+    }
+
+    @Test
+    fun parsesRemoteInventoryAddOnNumericStrings() {
+        val local = OrderInventoryAddOn(
+            id = "addon-1",
+            orderId = "order-1",
+            ingredientId = "cup",
+            quantity = 1.0,
+            createdAt = 900L,
+            restoredAt = 1_050L,
+            updatedAt = 1_200L,
+            localAdjustmentId = 77L
+        )
+
+        val parsed = orderInventoryAddOnFromRemote(
+            mapOf(
+                "id" to "addon-1",
+                "order_id" to "order-1",
+                "ingredient_id" to "cup",
+                "quantity" to "2.5",
+                "created_at" to "1000",
+                "updated_at" to "1100",
+                "restored_at" to "1300"
+            ),
+            local = local
+        )
+
+        assertEquals(2.5, parsed.quantity, 0.0)
+        assertEquals(1_000L, parsed.createdAt)
+        assertEquals(1_300L, parsed.restoredAt)
+        assertEquals(1_200L, parsed.updatedAt)
+        assertEquals(77L, parsed.localAdjustmentId)
+    }
+
+    @Test
+    fun invalidRemoteInventoryAddOnQuantityReportsFieldName() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            orderInventoryAddOnFromRemote(
+                mapOf(
+                    "id" to "addon-1",
+                    "order_id" to "order-1",
+                    "ingredient_id" to "cup",
+                    "quantity" to "not-a-number",
+                    "created_at" to "1000",
+                    "updated_at" to "1100",
+                    "restored_at" to null
+                ),
+                local = null
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("order_inventory_add_on.quantity"))
+    }
 }

@@ -138,6 +138,27 @@ internal fun orderInventoryAddOnPayload(row: OrderInventoryAddOn): Map<String, A
         row.restoredAt?.let { put("restored_at", it) }
     }
 
+internal fun orderInventoryAddOnFromRemote(
+    remote: Map<String, Any?>,
+    local: OrderInventoryAddOn?
+): OrderInventoryAddOn {
+    val remoteRestoredAt = remoteLongOrNull(remote["restored_at"], "order_inventory_add_on.restored_at")
+    val restoredAt = listOfNotNull(local?.restoredAt, remoteRestoredAt).maxOrNull()
+    val remoteUpdatedAt = remoteLong(remote["updated_at"], "order_inventory_add_on.updated_at")
+    val quantity = remoteDoubleOrNull(remote["quantity"], "order_inventory_add_on.quantity")
+        ?: throw IllegalArgumentException("Render returned a non-numeric value for 'order_inventory_add_on.quantity': ${remote["quantity"]}")
+    return OrderInventoryAddOn(
+        id = remote["id"] as String,
+        orderId = remote["order_id"] as String,
+        ingredientId = remote["ingredient_id"] as String,
+        quantity = quantity,
+        createdAt = remoteLong(remote["created_at"], "order_inventory_add_on.created_at"),
+        restoredAt = restoredAt,
+        updatedAt = maxOf(local?.updatedAt ?: 0L, remoteUpdatedAt),
+        localAdjustmentId = local?.localAdjustmentId
+    )
+}
+
 data class PromotionResult(
     val isWinner: Boolean = false,
     val awardId: String? = null,
@@ -1679,22 +1700,7 @@ class SupabaseSyncManager(
         val localById = inventoryDao.orderInventoryAddOnsNow().associateBy { it.id }
         val mergedRows = remoteRows.map { remote ->
             val id = remote["id"] as String
-            val local = localById[id]
-            val remoteRestoredAt = (remote["restored_at"] as? Number)?.toLong()
-            val restoredAt = listOfNotNull(local?.restoredAt, remoteRestoredAt).maxOrNull()
-            OrderInventoryAddOn(
-                id = id,
-                orderId = remote["order_id"] as String,
-                ingredientId = remote["ingredient_id"] as String,
-                quantity = (remote["quantity"] as Number).toDouble(),
-                createdAt = (remote["created_at"] as Number).toLong(),
-                restoredAt = restoredAt,
-                updatedAt = maxOf(
-                    local?.updatedAt ?: 0L,
-                    (remote["updated_at"] as Number).toLong()
-                ),
-                localAdjustmentId = local?.localAdjustmentId
-            )
+            orderInventoryAddOnFromRemote(remote, localById[id])
         }
         inventoryDao.upsertOrderInventoryAddOns(mergedRows)
     }

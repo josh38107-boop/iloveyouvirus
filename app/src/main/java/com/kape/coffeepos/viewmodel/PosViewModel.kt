@@ -71,6 +71,21 @@ internal fun secondReceiptCountdownValues(): List<Int> =
     (SECOND_RECEIPT_DELAY_SECONDS downTo 1).toList()
 internal fun shouldKickDrawerForReceiptCopy(copyNumber: Int): Boolean = copyNumber == 1
 
+internal fun removeCashAuthorizationError(
+    isManager: Boolean,
+    enteredPin: String,
+    correctPin: String
+): String? {
+    if (isManager) return null
+    return if (enteredPin == correctPin) null else "Incorrect PIN. Please try again."
+}
+
+internal fun parsePositiveCashAmountCents(input: String): Int? {
+    val amountDouble = input.toDoubleOrNull() ?: return null
+    if (amountDouble <= 0) return null
+    return (amountDouble * 100).roundToInt()
+}
+
 internal fun orderPaymentCategoryLabel(payments: List<Payment>): String? {
     val categories = payments.mapNotNull { payment ->
         payment.paymentCategory ?: PaymentCategories.fromLegacyMethod(payment.method)
@@ -213,6 +228,68 @@ internal fun buildDayEndClosingReportText(report: DailyReport, rangeName: String
             }
         }
     }
+    sb.appendLine(doubleDiv)
+    sb.appendLine(center("End of Report"))
+    return sb.toString()
+}
+
+internal fun buildInventoryUsageReportText(report: DailyReport, rangeName: String, W: Int): String {
+    val div = "-".repeat(W)
+    val doubleDiv = "=".repeat(W)
+
+    fun center(text: String): String {
+        val pad = ((W - text.length) / 2).coerceAtLeast(0)
+        return " ".repeat(pad) + text
+    }
+
+    fun row(left: String, right: String, width: Int = W): String {
+        val space = (width - left.length - right.length).coerceAtLeast(1)
+        return left + " ".repeat(space) + right
+    }
+
+    fun clean(text: String): String = text.replace('\n', ' ').replace('\r', ' ').trim()
+
+    fun formatQty(value: Double): String =
+        if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.US, "%.1f", value)
+
+    val sdf = SimpleDateFormat("MM/dd/yyyy h:mm a", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("Asia/Manila")
+    }
+    val generatedAt = sdf.format(Date())
+    val reportId = "INV-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("Asia/Manila") }
+        .format(Date())
+    val usedRows = report.ingredientUsage
+        .filter { it.usedToday > 0.0 }
+        .sortedBy { it.name }
+
+    val sb = StringBuilder()
+    sb.appendLine(center("Inventory Usage Report"))
+    sb.appendLine(row("Report ID:", reportId))
+    sb.appendLine(row("Date:", generatedAt))
+    sb.appendLine(row("Range:", rangeName))
+    sb.appendLine(doubleDiv)
+
+    if (usedRows.isEmpty()) {
+        sb.appendLine("No inventory usage recorded for this period.")
+    } else {
+        sb.appendLine(row("Ingredient", "Used"))
+        sb.appendLine(div)
+        usedRows.forEach { usage ->
+            val name = clean(usage.name).ifBlank { usage.ingredientId }
+            val used = "${formatQty(usage.usedToday)} ${clean(usage.unit)}"
+            val current = "${formatQty(usage.endingStock)} ${clean(usage.unit)}"
+            val stockLabel = if (usage.isLow) "Current stock LOW:" else "Current stock:"
+            if (name.length + used.length + 3 <= W) {
+                sb.appendLine(row(name, used))
+            } else {
+                sb.appendLine(name)
+                sb.appendLine(row("", used))
+            }
+            sb.appendLine(row("  $stockLabel", current))
+        }
+    }
+
     sb.appendLine(doubleDiv)
     sb.appendLine(center("End of Report"))
     return sb.toString()
@@ -436,6 +513,8 @@ data class PosUiState(
     val cashAddedReasonInput: String = "",
     val cashRemovedInput: String = "",
     val cashRemovedReasonInput: String = "",
+    val cashRemovePinInput: String = "",
+    val cashRemovePinError: String? = null,
     val cashCountedInput: String = "",
     val activeShiftAdjustments: List<ClosedShiftAdjustment> = emptyList(),
     val pendingVoidOrderId: String? = null,
@@ -487,7 +566,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         get() = _uiState.value.isManager && container.supabaseSyncManager.isManagerTablet
 
     val canRemoveCash: Boolean
-        get() = _uiState.value.isManager && container.supabaseSyncManager.isManagerTablet
+        get() = _uiState.value.employee != null
 
     private fun requireConfigurationAuthority(area: String): Boolean {
         val state = _uiState.value
@@ -2384,6 +2463,12 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         _uiState.update { it.copy(cashRemovedReasonInput = value) }
     }
 
+    fun updateCashRemovePinInput(value: String) {
+        if (value.length <= 4 && value.all { it.isDigit() }) {
+            _uiState.update { it.copy(cashRemovePinInput = value, cashRemovePinError = null) }
+        }
+    }
+
     fun updateCashCountedInput(value: String) {
         _uiState.update { it.copy(cashCountedInput = value) }
     }
@@ -2393,7 +2478,15 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun showRemoveCashDialog(show: Boolean) {
-        _uiState.update { it.copy(showRemoveCashDialog = show, cashRemovedInput = "", cashRemovedReasonInput = "") }
+        _uiState.update {
+            it.copy(
+                showRemoveCashDialog = show,
+                cashRemovedInput = "",
+                cashRemovedReasonInput = "",
+                cashRemovePinInput = "",
+                cashRemovePinError = null
+            )
+        }
     }
 
     fun showCloseShiftDialog(show: Boolean) {
@@ -2516,20 +2609,8 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
     fun removeCash() {
         viewModelScope.launch {
             val state = _uiState.value
-            if (!state.isManager) {
-                _uiState.update { it.copy(statusMessage = "Manager role required to remove cash.") }
-                return@launch
-            }
-            if (!container.supabaseSyncManager.isConfigured()) {
-                _uiState.update {
-                    it.copy(statusMessage = "Configure Render Cloud and enroll this device before removing cash.")
-                }
-                return@launch
-            }
-            if (!container.supabaseSyncManager.isManagerTablet) {
-                _uiState.update {
-                    it.copy(statusMessage = "Only the designated Manager Tablet can remove cash.")
-                }
+            if (state.employee == null) {
+                _uiState.update { it.copy(statusMessage = "Sign in before removing cash.") }
                 return@launch
             }
             val shift = state.activeShift
@@ -2537,18 +2618,33 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 _uiState.update { it.copy(statusMessage = "No active shift.") }
                 return@launch
             }
-            val amountDouble = state.cashRemovedInput.toDoubleOrNull()
-            if (amountDouble == null || amountDouble <= 0) {
+            val amountCents = parsePositiveCashAmountCents(state.cashRemovedInput)
+            if (amountCents == null) {
                 _uiState.update { it.copy(statusMessage = "Please enter a valid positive amount.") }
                 return@launch
             }
-            val amountCents = (amountDouble * 100).roundToInt()
+            val authorizationError = removeCashAuthorizationError(
+                isManager = state.isManager,
+                enteredPin = state.cashRemovePinInput,
+                correctPin = state.settings.voidRefundPin
+            )
+            if (authorizationError != null) {
+                _uiState.update {
+                    it.copy(
+                        cashRemovePinError = authorizationError,
+                        statusMessage = authorizationError
+                    )
+                }
+                return@launch
+            }
             container.shiftRepository.removeCash(shiftId = shift.id, amountCents = amountCents)
             _uiState.update {
                 it.copy(
                     showRemoveCashDialog = false,
                     cashRemovedInput = "",
                     cashRemovedReasonInput = "",
+                    cashRemovePinInput = "",
+                    cashRemovePinError = null,
                     statusMessage = String.format("Removed â‚±%,.2f from drawer.", amountCents / 100.0)
                 )
             }
@@ -4023,6 +4119,56 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
 
     internal fun buildSalesReportText(report: DailyReport, rangeName: String, W: Int): String =
         buildDayEndClosingReportText(report, rangeName, W)
+
+    fun printInventoryReport() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            if (!state.isReportRangeReady) {
+                _uiState.update { it.copy(statusMessage = state.reportRangeError ?: "Select a valid report range.") }
+                return@launch
+            }
+            val baseRangeName = when (state.reportDateRange) {
+                ReportDateRange.TODAY -> "Today"
+                ReportDateRange.MONTH -> "Month"
+                ReportDateRange.ALL -> "All Time"
+                ReportDateRange.CUSTOM -> {
+                    val sdf = java.text.SimpleDateFormat("MM/dd/yyyy", java.util.Locale.US).apply {
+                        timeZone = java.util.TimeZone.getTimeZone("Asia/Manila")
+                    }
+                    val startStr = state.reportCustomStart?.let { sdf.format(java.util.Date(it)) } ?: "Start"
+                    val endStr = state.reportCustomEnd?.let { sdf.format(java.util.Date(it)) } ?: "End"
+                    "$startStr - $endStr"
+                }
+            }
+            val cashierName = selectedReportCashierName(state)
+            val rangeName = if (cashierName != null) {
+                "$baseRangeName (Cashier: $cashierName)"
+            } else {
+                baseRangeName
+            }
+            val profile = state.printerProfile
+            val W = if (profile.lineCharacters > 0) profile.lineCharacters else (if (profile.paperWidthMm >= 80) 48 else 32)
+            val reportText = buildInventoryUsageReportText(state.dailyReport, rangeName, W)
+
+            _uiState.update { it.copy(printerBusy = true, printerMessage = "Printing inventory report...") }
+            val result = container.printerManager.print(reportText)
+            _uiState.update {
+                val message = if (result.success) {
+                    "Inventory report printed to ${result.device?.name ?: "printer"}."
+                } else {
+                    result.message
+                }
+                it.copy(
+                    printerBusy = false,
+                    connectedPrinter = result.device ?: container.printerManager.connectedPrinter(),
+                    savedPrinterAddress = container.printerManager.savedPrinterAddress,
+                    printerPermissionNeeded = !container.printerManager.hasBluetoothPermission(),
+                    printerMessage = message,
+                    statusMessage = message
+                )
+            }
+        }
+    }
 
     fun refreshPromotionConfig() {
         if (!container.supabaseSyncManager.isConfigured()) {

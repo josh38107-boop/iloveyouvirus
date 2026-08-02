@@ -2875,6 +2875,15 @@ private fun ReportsScreen(state: PosUiState, viewModel: PosViewModel) {
             }
 
             Button(
+                onClick = viewModel::printInventoryReport,
+                enabled = state.isReportRangeReady && !state.printerBusy,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(38.dp)
+            ) {
+                Text(if (state.printerBusy) "Printing..." else "Print Inventory")
+            }
+
+            Button(
                 onClick = {
                     val rangeName = when (state.reportDateRange) {
                         ReportDateRange.TODAY -> "Today"
@@ -4705,7 +4714,7 @@ private fun DrawerScreen(state: PosUiState, viewModel: PosViewModel) {
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(if (viewModel.canRemoveCash) "Remove Cash" else "Manager Tablet Only")
+                    Text("Remove Cash")
                 }
                 Button(
                     onClick = { viewModel.showCloseShiftDialog(true) },
@@ -4789,6 +4798,23 @@ private fun RemoveCashDialog(state: PosUiState, viewModel: PosViewModel) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (!state.isManager) {
+                    OutlinedTextField(
+                        value = state.cashRemovePinInput,
+                        onValueChange = viewModel::updateCashRemovePinInput,
+                        label = { Text("4-Digit Authorization PIN") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        isError = state.cashRemovePinError != null
+                    )
+                    if (state.cashRemovePinError != null) {
+                        Text(state.cashRemovePinError, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                }
             }
         },
         confirmButton = {
