@@ -75,6 +75,13 @@
     return new Date(`${value}T00:00:00+08:00`);
   }
   function reportDateRangeLabel(days, generatedAt, customRange) {
+    const reportWindow = customRange?.reportWindow;
+    if (reportWindow?.fromMs && reportWindow?.toMs) {
+      const start = formatReportDate(new Date(Number(reportWindow.fromMs)));
+      const end = formatReportDate(new Date(Number(reportWindow.toMs)));
+      const prefix = Number(reportWindow.days) === 1 ? 'Business day' : 'Business dates';
+      return start === end ? `${prefix} ${start}` : `${prefix} ${start} - ${end}`;
+    }
     const customStart = dateFromInput(customRange?.fromDate);
     const customEnd = dateFromInput(customRange?.toDate);
     if (customStart && customEnd) {
@@ -114,7 +121,8 @@
       rows.push(row(rowNumber, [textCell(`A${rowNumber}`, title, 2)]));
       merges.push(`A${rowNumber}:E${rowNumber}`);
     };
-    const dateLabel = reportDateRangeLabel(days, generatedAt, customRange);
+    const rangeContext = { ...(customRange || {}), reportWindow: stats?.reportWindow || customRange?.reportWindow };
+    const dateLabel = reportDateRangeLabel(days, generatedAt, rangeContext);
     const dateText = `${generatedAt.getMonth() + 1}/${generatedAt.getDate()}/${generatedAt.getFullYear()} ` +
       `${String(generatedAt.getHours()).padStart(2, '0')}:${String(generatedAt.getMinutes()).padStart(2, '0')}`;
 
@@ -195,7 +203,8 @@
   function download(stats, days, customRange = null) {
     const now = new Date(), link = document.createElement('a');
     const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    link.href = URL.createObjectURL(build(stats, days, now, customRange));
+    const rangeContext = { ...(customRange || {}), reportWindow: stats?.reportWindow || customRange?.reportWindow };
+    link.href = URL.createObjectURL(build(stats, days, now, rangeContext));
     link.download = `POS_Report_${Number(days) === 1 ? 'Today' : `Last_${days}_Days`}_${date}.xlsx`;
     document.body.appendChild(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);

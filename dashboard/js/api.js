@@ -20,6 +20,13 @@ async function apiFetch(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+function normalizeSalesResponse(response) {
+  if (Array.isArray(response)) return response;
+  const rows = Array.isArray(response?.rows) ? response.rows : [];
+  rows.reportWindow = response?.reportWindow || null;
+  return rows;
+}
+
 // Admin endpoints
 const api = {
   getStats: (days = 1, customRange = null) => {
@@ -30,9 +37,10 @@ const api = {
   },
   getSales: (days = 7, customRange = null) => {
     if (customRange?.fromDate && customRange?.toDate) {
-      return apiFetch(`/admin/sales?fromDate=${customRange.fromDate}&toDate=${customRange.toDate}`);
+      return apiFetch(`/admin/sales?fromDate=${customRange.fromDate}&toDate=${customRange.toDate}`)
+        .then(normalizeSalesResponse);
     }
-    return apiFetch(`/admin/sales?days=${days}`);
+    return apiFetch(`/admin/sales?days=${days}`).then(normalizeSalesResponse);
   },
   getOrders: (limit = 50, offset = 0) => apiFetch(`/admin/orders?limit=${limit}&offset=${offset}`),
   getOrder: (id) => apiFetch(`/admin/orders/${encodeURIComponent(id)}`),

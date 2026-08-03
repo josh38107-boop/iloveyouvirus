@@ -108,7 +108,7 @@
 <script src="js/report-export.js"></script>
 <script>
   requireAuth(); startClock();
-  let revenueChartInst, ordersChartInst, reportData = [];
+  let revenueChartInst, ordersChartInst, reportData = [], currentReportWindow = null;
 
   // Set default dates for the date pickers (today & 30 days ago)
   (function initDatePickers() {
@@ -154,6 +154,29 @@
     return val === '1' ? 'Today' : `Last ${val} days`;
   }
 
+  function formatReportWindowTime(ms) {
+    const value = Number(ms);
+    if (!Number.isFinite(value)) return '';
+    return new Date(value).toLocaleString('en-PH', {
+      timeZone: 'Asia/Manila',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  }
+
+  function getResolvedPeriodLabel(fallbackLabel, reportWindow) {
+    if (!reportWindow?.fromMs || !reportWindow?.toMs) return fallbackLabel;
+    const start = formatReportWindowTime(reportWindow.fromMs);
+    const end = formatReportWindowTime(reportWindow.toMs);
+    if (!start || !end) return fallbackLabel;
+    if (reportWindow.days === 1) return `Today business day: ${start} - ${end}`;
+    return `${fallbackLabel}: ${start} - ${end}`;
+  }
+
   async function loadReports() {
     const val = document.getElementById('periodSelect').value;
     let customRange = null;
@@ -162,12 +185,15 @@
       if (!customRange) return;
     }
     const days = val === 'custom' ? 30 : parseInt(val);
-    document.getElementById('chartSubtitle').textContent = getPeriodLabel();
+    const fallbackLabel = getPeriodLabel();
+    document.getElementById('chartSubtitle').textContent = fallbackLabel;
     const [sales, stats] = await Promise.all([
       api.getSales(days, customRange),
       api.getStats(days, customRange)
     ]);
-    reportData = sales;
+    reportData = Array.isArray(sales) ? sales : (sales?.rows || []);
+    currentReportWindow = stats?.reportWindow || sales?.reportWindow || null;
+    document.getElementById('chartSubtitle').textContent = getResolvedPeriodLabel(fallbackLabel, currentReportWindow);
     if (!reportData || !stats) return;
 
     const totalRevenue = reportData.reduce((s, d) => s + parseInt(d.revenue||0), 0);

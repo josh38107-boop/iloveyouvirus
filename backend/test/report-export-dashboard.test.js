@@ -29,11 +29,13 @@ test('report export uses order summary instead of top selling items', () => {
 
 test('report export shows actual date range in report details', () => {
   assert.match(script, /function reportDateRangeLabel\(days, generatedAt, customRange\)/);
-  assert.match(script, /const dateLabel = reportDateRangeLabel\(days, generatedAt, customRange\)/);
+  assert.match(script, /const rangeContext = \{ \.\.\.\(customRange \|\| \{\}\), reportWindow: stats\?\.reportWindow \|\| customRange\?\.reportWindow \}/);
+  assert.match(script, /const dateLabel = reportDateRangeLabel\(days, generatedAt, rangeContext\)/);
+  assert.match(script, /customRange\?\.reportWindow/);
   assert.match(script, /customRange\?\.fromDate/);
   assert.match(script, /customRange\?\.toDate/);
   assert.doesNotMatch(script, /Number\(days\) === 1 \? 'Today' : `Last \$\{days\} Days`/);
   assert.match(script, /makeWorksheet\(stats, days, generatedAt, customRange\)/);
-  assert.match(script, /build\(stats, days, now, customRange\)/);
+  assert.match(script, /build\(stats, days, now, rangeContext\)/);
   assert.match(reportsPage, /ReportWorkbook\.download\(stats, days, customRange\)/);
 });

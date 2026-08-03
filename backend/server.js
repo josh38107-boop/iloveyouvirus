@@ -11,6 +11,13 @@ const { createEmployeeService } = require('./employees');
 const { createDiscountService } = require('./discounts');
 const { createPaymentVoidService } = require('./payment-void');
 const { createDataMaintenanceService } = require('./data-maintenance');
+const {
+  MANILA_TIME_ZONE,
+  DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES,
+  normalizeCutoffMinutes,
+  currentBusinessDayWindow,
+  reportWindowForRange
+} = require('./report-range');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
@@ -48,48 +55,7 @@ const RESET_GUARDED_RPCS = new Set([
   'release_promotion_claim', 'finalize_promotion_claim', 'mark_promotion_printed'
 ]);
 
-const MANILA_TIME_ZONE = 'Asia/Manila';
-const DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES = 120;
 const HIDEABLE_HAPPENING_ID_PATTERN = /^shift-(open|close)-\d+$/;
-
-function normalizeCutoffMinutes(value) {
-  const minutes = Number(value);
-  return Number.isInteger(minutes) && minutes >= 0 && minutes <= 1439
-    ? minutes
-    : DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES;
-}
-
-function manilaDateLabel(date) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: MANILA_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(date).reduce((acc, part) => {
-    acc[part.type] = part.value;
-    return acc;
-  }, {});
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function windowForBusinessDate(dateLabel, cutoffMinutes) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateLabel || ''))) return null;
-  const cutoff = normalizeCutoffMinutes(cutoffMinutes);
-  const hours = String(Math.floor(cutoff / 60)).padStart(2, '0');
-  const minutes = String(cutoff % 60).padStart(2, '0');
-  const start = new Date(`${dateLabel}T${hours}:${minutes}:00+08:00`);
-  if (Number.isNaN(start.getTime())) return null;
-  return { startMs: start.getTime(), endMs: start.getTime() + 24 * 60 * 60 * 1000 };
-}
-
-function currentBusinessDayWindow(cutoffMinutes, nowMs = Date.now()) {
-  const today = manilaDateLabel(new Date(nowMs));
-  let window = windowForBusinessDate(today, cutoffMinutes);
-  if (nowMs < window.startMs) {
-    window = windowForBusinessDate(manilaDateLabel(new Date(window.startMs - 1)), cutoffMinutes);
-  }
-  return { businessDate: manilaDateLabel(new Date(window.startMs)), ...window };
-}
 
 async function getBusinessDayCutoffMinutes() {
   const result = await db.query(`SELECT business_day_cutoff_minutes
@@ -502,23 +468,7 @@ app.post('/sync/v1/rpc/:fn', cloud.deviceAuth, guardOperationalRpc, (req, res, n
 
 async function reportRange(daysParam, fromDate, toDate) {
   const cutoffMinutes = await getBusinessDayCutoffMinutes();
-  // Custom range: fromDate and toDate are ISO date strings (YYYY-MM-DD)
-  if (fromDate && toDate) {
-    const from = windowForBusinessDate(fromDate, cutoffMinutes);
-    const to = windowForBusinessDate(toDate, cutoffMinutes);
-    if (from && to && from.startMs <= to.startMs) {
-      return { days: null, fromMs: from.startMs, toMs: to.endMs, cutoffMinutes };
-    }
-  }
-  const parsed = parseInt(daysParam, 10);
-  const days = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), 365);
-  const current = currentBusinessDayWindow(cutoffMinutes);
-  return {
-    days,
-    fromMs: current.startMs - (days - 1) * 24 * 60 * 60 * 1000,
-    toMs: Date.now(),
-    cutoffMinutes
-  };
+  return reportWindowForRange({ daysParam, fromDate, toDate, cutoffMinutes });
 }
 
 function paymentCategory(row) {
@@ -623,7 +573,8 @@ app.put('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
     await ensureHiddenActivityHistoryTable();
-    const { days, fromMs, toMs } = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
+    const range = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
+    const { days, fromMs, toMs } = range;
     const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes, hiddenShiftRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
@@ -859,7 +810,8 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       orderSummary: orderSummaryRes.rows,
       discountBreakdown: discountRes.rows,
       paymentBreakdown: payments,
-      cashDrawer
+      cashDrawer,
+      reportWindow: range
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -869,7 +821,8 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
 // GET /admin/sales?days=7&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — sales chart data
 app.get('/admin/sales', adminAuthenticate, async (req, res) => {
   try {
-    const { fromMs, toMs, cutoffMinutes } = await reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
+    const range = await reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
+    const { fromMs, toMs, cutoffMinutes } = range;
     const result = await db.query(`
       SELECT
         TO_CHAR(TO_TIMESTAMP((o.created_at - $3) / 1000) AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') as date,
@@ -880,7 +833,7 @@ app.get('/admin/sales', adminAuthenticate, async (req, res) => {
         AND ${nonComplimentaryOrderPredicate('o')}
       GROUP BY date ORDER BY date
     `, [fromMs, toMs, cutoffMinutes * 60 * 1000]);
-    res.json(result.rows);
+    res.json({ rows: result.rows, reportWindow: range });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
