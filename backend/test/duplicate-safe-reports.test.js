@@ -43,17 +43,24 @@ test('website stats expose duplicate-safe order summary rows', () => {
   assert.match(server, /WHERE o\.created_at >= \$1 AND o\.created_at < \$2 AND o\.status = 'paid'[\s\S]*?AND \$\{nonComplimentaryOrderPredicate\('o'\)\}/);
 });
 
-test('website report cash drawer excludes hidden Activity History shift cash entries', () => {
-  assert.match(server, /await ensureHiddenActivityHistoryTable\(\);/);
-  assert.match(server, /hiddenShiftRes/);
-  assert.match(server, /FROM hidden_activity_history/);
-  assert.match(server, /event_id LIKE 'shift-open-%' OR event_id LIKE 'shift-close-%'/);
-  assert.match(server, /hiddenShiftEventIds = new Set/);
-  assert.match(server, /hideOpenCash = hiddenShiftEventIds\.has\(`shift-open-\$\{shiftId\}`\)/);
-  assert.match(server, /hideCloseCash/);
-  assert.match(server, /if \(hideOpenCash \|\| hideCloseCash\) return totals;/);
-  assert.doesNotMatch(server, /const starting = hideOpenCash \? 0 : parseInt\(shift\.starting_cash_cents \|\| 0\)/);
-  assert.doesNotMatch(server, /shift\.ending_cash_cents == null \|\| hideCloseCash/);
+test('website report cash drawer includes shifts hidden from Activity History', () => {
+  const statsRoute = server.match(/app\.get\('\/admin\/stats'[\s\S]*?\/\/ GET \/admin\/sales/)[0];
+  assert.doesNotMatch(statsRoute, /hiddenShiftRes/);
+  assert.doesNotMatch(statsRoute, /hiddenShiftEventIds/);
+  assert.doesNotMatch(statsRoute, /FROM hidden_activity_history/);
+  assert.doesNotMatch(statsRoute, /hideOpenCash|hideCloseCash/);
+  assert.doesNotMatch(statsRoute, /if \([^)]*hide[^)]*\) return totals;/);
+  assert.match(statsRoute, /const starting = parseInt\(shift\.starting_cash_cents \|\| 0\)/);
+  assert.match(statsRoute, /totals\.expectedCashEnding \+= expected/);
+});
+
+test('website report cash drawer balances actual ending to expected', () => {
+  const statsRoute = server.match(/app\.get\('\/admin\/stats'[\s\S]*?\/\/ GET \/admin\/sales/)[0];
+  assert.match(statsRoute, /totals\.expectedCashEnding \+= expected/);
+  assert.match(statsRoute, /totals\.actualCashEnding \+= expected/);
+  assert.match(statsRoute, /cashDrawer\.difference = 0/);
+  assert.doesNotMatch(statsRoute, /parseInt\(shift\.ending_cash_cents \|\| 0\)/);
+  assert.doesNotMatch(statsRoute, /cashDrawer\.actualCashEnding - cashDrawer\.expectedCashEnding/);
 });
 
 test('website report sales metrics exclude complimentary paid orders', () => {

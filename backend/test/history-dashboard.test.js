@@ -39,6 +39,8 @@ test('history dashboard exposes confirmed delete for shift rows only', () => {
   assert.match(html, /\^\(SHIFT_OPENED\|SHIFT_CLOSED\)\$/);
   assert.match(html, /function deleteHappening\(id\)/);
   assert.match(html, /confirm\(`Delete "\$\{target\.title\}" from Activity History\?/);
+  assert.match(html, /Sales, orders, and reports will remain/);
+  assert.doesNotMatch(html, /excludes its shift cash amount from Reports Excel/);
   assert.match(html, /api\.deleteHappening\(id\)/);
   assert.match(html, /class="btn btn-delete-outline history-delete"/);
 });

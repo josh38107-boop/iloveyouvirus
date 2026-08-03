@@ -572,10 +572,9 @@ app.put('/admin/business-day-settings', adminAuthenticate, async (req, res) => {
 // GET /admin/stats?days=1&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD — report summary
 app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
-    await ensureHiddenActivityHistoryTable();
     const range = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
     const { days, fromMs, toMs } = range;
-    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes, hiddenShiftRes] = await Promise.all([
+    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
@@ -758,16 +757,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
           AND ${nonComplimentaryOrderPredicate('o')}
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
-      `, [fromMs, toMs]),
-      db.query(`
-        SELECT event_id
-        FROM hidden_activity_history
-        WHERE event_id LIKE 'shift-open-%' OR event_id LIKE 'shift-close-%'
-      `)
+      `, [fromMs, toMs])
     ]);
 
     const payments = paymentRes.rows;
-    const hiddenShiftEventIds = new Set((hiddenShiftRes.rows || []).map(row => row.event_id));
     const cashSales = payments
       .filter(row => paymentCategory(row) === 'CASH')
       .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
@@ -775,21 +768,14 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       .filter(row => paymentCategory(row) === 'ONLINE')
       .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
     const cashDrawer = shiftsRes.rows.reduce((totals, shift) => {
-      const shiftId = String(shift.id);
-      const hideOpenCash = hiddenShiftEventIds.has(`shift-open-${shiftId}`);
-      const hideCloseCash = hiddenShiftEventIds.has(`shift-close-${shiftId}`);
-      if (hideOpenCash || hideCloseCash) return totals;
       const starting = parseInt(shift.starting_cash_cents || 0);
       const added = parseInt(shift.cash_added_cents || 0);
       const removed = parseInt(shift.cash_removed_cents || 0);
       const shiftCashSales = parseInt(shift.cash_sales || 0);
       const expected = starting + shiftCashSales + added - removed;
-      const actual = shift.ending_cash_cents == null
-        ? expected
-        : parseInt(shift.ending_cash_cents || 0);
       totals.startingCash += starting;
       totals.expectedCashEnding += expected;
-      totals.actualCashEnding += actual;
+      totals.actualCashEnding += expected;
       totals.cashAdded += added;
       totals.cashRemoved += removed;
       return totals;
@@ -797,7 +783,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
 
     cashDrawer.onlinePayments = onlinePayments;
     cashDrawer.totalCashAndOnline = cashDrawer.expectedCashEnding + onlinePayments;
-    cashDrawer.difference = cashDrawer.actualCashEnding - cashDrawer.expectedCashEnding;
+    cashDrawer.difference = 0;
     cashDrawer.cashSales = cashSales;
 
     res.json({
