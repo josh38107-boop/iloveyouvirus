@@ -733,17 +733,20 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
             COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at,
             device_id, id
         )
-        SELECT s.id, s.starting_cash_cents, s.ending_cash_cents,
+        SELECT s.device_id, s.id, s.starting_cash_cents, s.ending_cash_cents,
                s.cash_added_cents, s.cash_removed_cents,
                COALESCE(SUM(CASE
                  WHEN UPPER(COALESCE(p.payment_category, '')) = 'CASH'
                    OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) = 'cash')
                  THEN p.amount_cents ELSE 0 END), 0) as cash_sales
         FROM shift s
-        LEFT JOIN pos_order o ON o.shift_id = s.id AND o.status = 'paid'
+        LEFT JOIN pos_order o ON o.shift_id = s.id
+          AND o.shift_device_id = s.device_id
+          AND o.status = 'paid'
+          AND o.created_at >= $1 AND o.created_at < $2
         LEFT JOIN deduped_payment p ON p.order_id = o.id
         WHERE s.opened_at >= $1 AND s.opened_at < $2
-        GROUP BY s.id, s.starting_cash_cents, s.ending_cash_cents,
+        GROUP BY s.device_id, s.id, s.starting_cash_cents, s.ending_cash_cents,
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
         ORDER BY s.opened_at
       `, [fromMs, toMs]),
@@ -772,14 +775,17 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       const added = parseInt(shift.cash_added_cents || 0);
       const removed = parseInt(shift.cash_removed_cents || 0);
       const shiftCashSales = parseInt(shift.cash_sales || 0);
-      const displayedStarting = starting + added - removed;
+      const hasCashSales = shiftCashSales > 0;
+      const displayedStarting = hasCashSales ? starting + added - removed : starting;
       const expected = displayedStarting + shiftCashSales;
-      if (starting > 0 || shiftCashSales > 0) totals.hasActivity = true;
+      if (starting > 0 || hasCashSales) totals.hasActivity = true;
       totals.startingCash += displayedStarting;
       totals.expectedCashEnding += expected;
       totals.actualCashEnding += expected;
-      totals.cashAdded += added;
-      totals.cashRemoved += removed;
+      if (hasCashSales) {
+        totals.cashAdded += added;
+        totals.cashRemoved += removed;
+      }
       return totals;
     }, { hasActivity: false, startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
 

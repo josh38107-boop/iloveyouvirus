@@ -50,14 +50,19 @@ test('website report cash drawer includes shifts hidden from Activity History', 
   assert.doesNotMatch(statsRoute, /FROM hidden_activity_history/);
   assert.doesNotMatch(statsRoute, /hideOpenCash|hideCloseCash/);
   assert.doesNotMatch(statsRoute, /if \([^)]*hide[^)]*\) return totals;/);
+  assert.match(statsRoute, /SELECT s\.device_id, s\.id, s\.starting_cash_cents/);
+  assert.match(statsRoute, /LEFT JOIN pos_order o ON o\.shift_id = s\.id\s+AND o\.shift_device_id = s\.device_id/);
+  assert.match(statsRoute, /AND o\.created_at >= \$1 AND o\.created_at < \$2/);
+  assert.match(statsRoute, /GROUP BY s\.device_id, s\.id/);
   assert.match(statsRoute, /const starting = parseInt\(shift\.starting_cash_cents \|\| 0\)/);
-  assert.match(statsRoute, /const displayedStarting = starting \+ added - removed/);
+  assert.match(statsRoute, /const displayedStarting = hasCashSales \? starting \+ added - removed : starting/);
   assert.match(statsRoute, /totals\.startingCash \+= displayedStarting/);
   assert.match(statsRoute, /totals\.expectedCashEnding \+= expected/);
 });
 
 test('website report cash drawer balances actual ending to expected', () => {
   const statsRoute = server.match(/app\.get\('\/admin\/stats'[\s\S]*?\/\/ GET \/admin\/sales/)[0];
+  assert.match(statsRoute, /const hasCashSales = shiftCashSales > 0/);
   assert.match(statsRoute, /const expected = displayedStarting \+ shiftCashSales/);
   assert.match(statsRoute, /totals\.expectedCashEnding \+= expected/);
   assert.match(statsRoute, /totals\.actualCashEnding \+= expected/);
@@ -68,7 +73,8 @@ test('website report cash drawer balances actual ending to expected', () => {
 
 test('website report cash drawer zeros adjustment-only shifts', () => {
   const statsRoute = server.match(/app\.get\('\/admin\/stats'[\s\S]*?\/\/ GET \/admin\/sales/)[0];
-  assert.match(statsRoute, /if \(starting > 0 \|\| shiftCashSales > 0\) totals\.hasActivity = true/);
+  assert.match(statsRoute, /if \(starting > 0 \|\| hasCashSales\) totals\.hasActivity = true/);
+  assert.match(statsRoute, /if \(hasCashSales\) \{\s*totals\.cashAdded \+= added;\s*totals\.cashRemoved \+= removed;\s*\}/);
   assert.match(statsRoute, /hasActivity: false/);
   assert.match(statsRoute, /if \(!cashDrawer\.hasActivity\) \{/);
   assert.match(statsRoute, /cashDrawer\.startingCash = 0/);
