@@ -66,6 +66,20 @@ test('website report cash drawer balances actual ending to expected', () => {
   assert.doesNotMatch(statsRoute, /cashDrawer\.actualCashEnding - cashDrawer\.expectedCashEnding/);
 });
 
+test('website report cash drawer zeros adjustment-only shifts', () => {
+  const statsRoute = server.match(/app\.get\('\/admin\/stats'[\s\S]*?\/\/ GET \/admin\/sales/)[0];
+  assert.match(statsRoute, /if \(starting > 0 \|\| shiftCashSales > 0\) totals\.hasActivity = true/);
+  assert.match(statsRoute, /hasActivity: false/);
+  assert.match(statsRoute, /if \(!cashDrawer\.hasActivity\) \{/);
+  assert.match(statsRoute, /cashDrawer\.startingCash = 0/);
+  assert.match(statsRoute, /cashDrawer\.expectedCashEnding = 0/);
+  assert.match(statsRoute, /cashDrawer\.actualCashEnding = 0/);
+  assert.match(statsRoute, /cashDrawer\.cashAdded = 0/);
+  assert.match(statsRoute, /cashDrawer\.cashRemoved = 0/);
+  assert.doesNotMatch(statsRoute, /hasActivity: shiftsRes\.rows\.length > 0/);
+  assert.match(statsRoute, /cashDrawer,/);
+});
+
 test('website report sales metrics exclude complimentary paid orders', () => {
   assert.match(server, /function nonComplimentaryOrderPredicate\(orderAlias\)/);
   assert.match(server, /LOWER\(complimentary_payment\.method\) = 'complimentary'/);

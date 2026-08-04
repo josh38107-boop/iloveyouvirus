@@ -774,18 +774,29 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       const shiftCashSales = parseInt(shift.cash_sales || 0);
       const displayedStarting = starting + added - removed;
       const expected = displayedStarting + shiftCashSales;
+      if (starting > 0 || shiftCashSales > 0) totals.hasActivity = true;
       totals.startingCash += displayedStarting;
       totals.expectedCashEnding += expected;
       totals.actualCashEnding += expected;
       totals.cashAdded += added;
       totals.cashRemoved += removed;
       return totals;
-    }, { startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
+    }, { hasActivity: false, startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
 
     cashDrawer.onlinePayments = onlinePayments;
     cashDrawer.totalCashAndOnline = cashDrawer.expectedCashEnding + onlinePayments;
     cashDrawer.difference = 0;
     cashDrawer.cashSales = cashSales;
+    if (!cashDrawer.hasActivity) {
+      cashDrawer.startingCash = 0;
+      cashDrawer.expectedCashEnding = 0;
+      cashDrawer.actualCashEnding = 0;
+      cashDrawer.cashAdded = 0;
+      cashDrawer.cashRemoved = 0;
+      cashDrawer.onlinePayments = 0;
+      cashDrawer.totalCashAndOnline = 0;
+      cashDrawer.cashSales = 0;
+    }
 
     res.json({
       days,

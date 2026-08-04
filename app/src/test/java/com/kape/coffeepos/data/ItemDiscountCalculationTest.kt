@@ -72,6 +72,16 @@ class ItemDiscountCalculationTest {
     }
 
     @Test
+    fun multiItemDiscountRoundsOnceForTheSelectedSubtotal() {
+        val lines = listOf(
+            CartLine(id = "first", item = menuItem("First", 1)),
+            CartLine(id = "second", item = menuItem("Second", 1))
+        )
+
+        assertEquals(1, calculateMultiItemDiscountCents(lines, setOf("first", "second"), 25.0))
+    }
+
+    @Test
     fun multiItemDiscountRequiresSelectionAndValidPercent() {
         val lines = listOf(CartLine(id = "latte", item = menuItem("Latte", 15000), quantity = 2))
 

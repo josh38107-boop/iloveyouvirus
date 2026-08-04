@@ -1319,6 +1319,13 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                                     fontWeight = FontWeight.SemiBold
                                 )
                             } else if (state.selectedDiscountScope == "multi") {
+                                if (state.selectedDiscountLineIds.isNotEmpty()) {
+                                    Text(
+                                        "Applies to ${state.selectedDiscountLineIds.size} selected item${if (state.selectedDiscountLineIds.size == 1) "" else "s"}: -${money(state.discountCents)}",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                                 Text(
                                     "Choose items for discount (Required)",
                                     fontWeight = FontWeight.SemiBold,
@@ -1326,7 +1333,6 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                                 )
                                 state.cart.forEach { line ->
                                     val selected = line.id in state.selectedDiscountLineIds
-                                    val expectedDiscount = (line.lineTotalCents * state.selectedDiscountPercent / 100.0).roundToInt()
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1354,7 +1360,11 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                                                 }
                                                 Text("Line total: ${money(line.lineTotalCents)}", style = MaterialTheme.typography.bodySmall)
                                             }
-                                            Text("-${money(expectedDiscount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                if (selected) "Selected" else "Select",
+                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                     }
                                 }

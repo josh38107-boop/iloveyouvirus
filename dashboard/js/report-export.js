@@ -161,12 +161,12 @@
       currentRow++;
     }
 
+    const drawer = stats.cashDrawer || {};
     currentRow++;
     addSection(currentRow, 'CASH DRAWER SUMMARY');
     currentRow++;
     rows.push(row(currentRow, [textCell(`A${currentRow}`, 'Metric', 3), textCell(`B${currentRow}`, 'Value', 3)]));
     currentRow++;
-    const drawer = stats.cashDrawer || {};
     const drawerRows = [
       ['Starting Cash', drawer.startingCash], ['Expected Cash Ending', drawer.expectedCashEnding],
       ['Online Payments', drawer.onlinePayments], ['Total Cash + Online Payment', drawer.totalCashAndOnline],

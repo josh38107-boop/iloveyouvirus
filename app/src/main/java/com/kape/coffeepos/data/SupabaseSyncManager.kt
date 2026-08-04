@@ -3,6 +3,7 @@ package com.kape.coffeepos.data
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.room.withTransaction
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
@@ -1311,9 +1312,11 @@ class SupabaseSyncManager(
         val jsonDiscountRules = makeRequest("discount_rule?select=*&order=sort_order.asc", "GET")
         val discountRuleType = object : TypeToken<List<DiscountRule>>() {}.type
         val remoteDiscountRules: List<DiscountRule> = gson.fromJson(jsonDiscountRules, discountRuleType)
-        db.settingsDao().clearDiscountRules()
-        if (remoteDiscountRules.isNotEmpty()) {
-            db.settingsDao().upsertDiscountRules(remoteDiscountRules)
+        db.withTransaction {
+            db.settingsDao().clearDiscountRules()
+            if (remoteDiscountRules.isNotEmpty()) {
+                db.settingsDao().upsertDiscountRules(remoteDiscountRules)
+            }
         }
 
         // 11. Employees

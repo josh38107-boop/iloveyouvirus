@@ -176,11 +176,10 @@ internal fun calculateMultiItemDiscountCents(
     percent: Double
 ): Int {
     if (cartLineIds.isEmpty() || percent <= 0.0) return 0
-    return lines
+    val subtotal = lines
         .filter { it.id in cartLineIds }
-        .sumOf { line ->
-            (line.lineTotalCents * percent / 100.0).roundToInt().coerceIn(0, line.lineTotalCents)
-        }
+        .sumOf { it.lineTotalCents }
+    return (subtotal * percent / 100.0).roundToInt().coerceIn(0, subtotal)
 }
 
 private fun normalizeAppliedDiscount(
@@ -208,8 +207,6 @@ private fun discountCentsForLine(selection: ItemDiscountSelection?, line: CartLi
     return when {
         selected.scope == "item" && selected.cartLineId == line.id ->
             selected.discountCents.coerceIn(0, line.unitPriceCents)
-        selected.scope == "multi" && line.id in selected.selectedLineIds() ->
-            (line.lineTotalCents * selected.percent / 100.0).roundToInt().coerceIn(0, line.lineTotalCents)
         else -> 0
     }
 }

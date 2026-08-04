@@ -39,3 +39,9 @@ test('report export shows actual date range in report details', () => {
   assert.match(script, /build\(stats, days, now, rangeContext\)/);
   assert.match(reportsPage, /ReportWorkbook\.download\(stats, days, customRange\)/);
 });
+
+test('report export keeps cash drawer summary section', () => {
+  assert.match(script, /const drawer = stats\.cashDrawer \|\| \{\}/);
+  assert.doesNotMatch(script, /drawer\.hasActivity !== false/);
+  assert.match(script, /'CASH DRAWER SUMMARY'/);
+});
