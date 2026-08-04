@@ -140,8 +140,12 @@ internal data class ItemDiscountSelection(
     val discountCents: Int,
     val ruleId: String? = null,
     val scope: String = "item",
-    val reference: String? = null
+    val reference: String? = null,
+    val cartLineIds: Set<String> = emptySet()
 )
+
+private fun ItemDiscountSelection.selectedLineIds(): Set<String> =
+    cartLineIds.ifEmpty { cartLineId?.let { setOf(it) } ?: emptySet() }
 
 internal fun calculateSingleItemDiscountCents(
     lines: List<CartLine>,
@@ -166,6 +170,19 @@ internal fun calculateWholeOrderDiscountCents(lines: List<CartLine>, percent: Do
     return (subtotal * percent / 100.0).roundToInt().coerceIn(0, subtotal)
 }
 
+internal fun calculateMultiItemDiscountCents(
+    lines: List<CartLine>,
+    cartLineIds: Set<String>,
+    percent: Double
+): Int {
+    if (cartLineIds.isEmpty() || percent <= 0.0) return 0
+    return lines
+        .filter { it.id in cartLineIds }
+        .sumOf { line ->
+            (line.lineTotalCents * percent / 100.0).roundToInt().coerceIn(0, line.lineTotalCents)
+        }
+}
+
 private fun normalizeAppliedDiscount(
     lines: List<CartLine>,
     selection: ItemDiscountSelection?
@@ -180,9 +197,21 @@ private fun normalizeAppliedDiscount(
         selected.category == "PROMO_FREE_DRINK" ->
             selected.discountCents.coerceIn(0, calculatePromotionBaseDiscountCents(lines, selected.cartLineId))
         selected.scope == "order" -> calculateWholeOrderDiscountCents(lines, selected.percent)
+        selected.scope == "multi" -> calculateMultiItemDiscountCents(lines, selected.selectedLineIds(), selected.percent)
         else -> calculateSingleItemDiscountCents(lines, selected.cartLineId, selected.percent)
     }
     return selected.copy(discountCents = cents).takeIf { cents > 0 }
+}
+
+private fun discountCentsForLine(selection: ItemDiscountSelection?, line: CartLine): Int {
+    val selected = selection ?: return 0
+    return when {
+        selected.scope == "item" && selected.cartLineId == line.id ->
+            selected.discountCents.coerceIn(0, line.unitPriceCents)
+        selected.scope == "multi" && line.id in selected.selectedLineIds() ->
+            (line.lineTotalCents * selected.percent / 100.0).roundToInt().coerceIn(0, line.lineTotalCents)
+        else -> 0
+    }
 }
 
 data class ShiftOpenResult(
@@ -815,9 +844,7 @@ class OrderRepository(
             orderDao.insertOrder(order)
             orderDao.insertLines(
                 lines.map {
-                    val lineDiscount = appliedItemDiscount?.takeIf { selection ->
-                        selection.scope == "item" && selection.cartLineId == it.id
-                    }
+                    val lineDiscountCents = discountCentsForLine(appliedItemDiscount, it)
                     OrderLine(
                         orderId = orderId,
                         itemId = it.item.id,
@@ -826,8 +853,8 @@ class OrderRepository(
                         unitPriceCents = it.unitPriceCents,
                         modifiers = it.modifierLabel,
                         notes = it.notes,
-                        discountCategory = lineDiscount?.category,
-                        discountCents = lineDiscount?.discountCents ?: 0
+                        discountCategory = appliedItemDiscount?.category?.takeIf { lineDiscountCents > 0 },
+                        discountCents = lineDiscountCents
                     )
                 }
             )
@@ -921,9 +948,7 @@ class OrderRepository(
             orderDao.insertOrder(order)
             orderDao.insertLines(
                 lines.map {
-                    val lineDiscount = appliedItemDiscount?.takeIf { selection ->
-                        selection.scope == "item" && selection.cartLineId == it.id
-                    }
+                    val lineDiscountCents = discountCentsForLine(appliedItemDiscount, it)
                     OrderLine(
                         orderId = orderId,
                         itemId = it.item.id,
@@ -932,8 +957,8 @@ class OrderRepository(
                         unitPriceCents = it.unitPriceCents,
                         modifiers = it.modifierLabel,
                         notes = it.notes,
-                        discountCategory = lineDiscount?.category,
-                        discountCents = lineDiscount?.discountCents ?: 0
+                        discountCategory = appliedItemDiscount?.category?.takeIf { lineDiscountCents > 0 },
+                        discountCents = lineDiscountCents
                     )
                 }
             )
@@ -1252,14 +1277,15 @@ class OrderRepository(
             sb.appendLine(div)
             // Items
             for (line in lines) {
+                val lineDiscountCents = discountCentsForLine(itemDiscount, line)
                 val price = formatPeso(line.lineTotalCents)
                 formatReceiptItemLines(line.quantity, line.item.name, price, W)
                     .forEach(sb::appendLine)
                 if (line.modifierLabel.isNotBlank()) {
                     sb.appendLine("  + ${line.modifierLabel}")
                 }
-                if (itemDiscount?.cartLineId == line.id && itemDiscount.discountCents > 0) {
-                    sb.appendLine(row("  ${itemDiscount.category} discount", "-${formatPeso(itemDiscount.discountCents)}"))
+                if (itemDiscount != null && lineDiscountCents > 0) {
+                    sb.appendLine(row("  ${itemDiscount.category} discount", "-${formatPeso(lineDiscountCents)}"))
                 }
             }
             sb.appendLine(div)
@@ -1325,14 +1351,15 @@ class OrderRepository(
             sb.appendLine(div)
             // Items
             for (line in lines) {
+                val lineDiscountCents = discountCentsForLine(itemDiscount, line)
                 val price = formatPeso(line.lineTotalCents)
                 formatReceiptItemLines(line.quantity, line.item.name, price, W)
                     .forEach(sb::appendLine)
                 if (line.modifierLabel.isNotBlank()) {
                     sb.appendLine("  + ${line.modifierLabel}")
                 }
-                if (itemDiscount?.cartLineId == line.id && itemDiscount.discountCents > 0) {
-                    sb.appendLine(row("  ${itemDiscount.category} discount", "-${formatPeso(itemDiscount.discountCents)}"))
+                if (itemDiscount != null && lineDiscountCents > 0) {
+                    sb.appendLine(row("  ${itemDiscount.category} discount", "-${formatPeso(lineDiscountCents)}"))
                 }
             }
             sb.appendLine(div)

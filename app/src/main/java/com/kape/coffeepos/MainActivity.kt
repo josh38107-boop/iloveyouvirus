@@ -45,6 +45,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -1317,6 +1318,53 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
                                 )
+                            } else if (state.selectedDiscountScope == "multi") {
+                                Text(
+                                    "Choose items for discount (Required)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                                state.cart.forEach { line ->
+                                    val selected = line.id in state.selectedDiscountLineIds
+                                    val expectedDiscount = (line.lineTotalCents * state.selectedDiscountPercent / 100.0).roundToInt()
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 56.dp)
+                                            .clickable { viewModel.selectDiscountLine(line.id) },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceVariant
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Checkbox(selected, onCheckedChange = null)
+                                            Column(Modifier.weight(1f)) {
+                                                Text(
+                                                    if (line.quantity > 1) "${line.quantity} x ${line.item.name}"
+                                                    else "1 x ${line.item.name}",
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                if (line.modifierLabel.isNotBlank()) {
+                                                    Text(line.modifierLabel, style = MaterialTheme.typography.bodySmall)
+                                                }
+                                                Text("Line total: ${money(line.lineTotalCents)}", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                            Text("-${money(expectedDiscount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                                if (state.selectedDiscountLineIds.isEmpty()) {
+                                    Text(
+                                        "Select at least one item to discount.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             } else {
                                 Text(
                                     "Choose item for discount (Required)",
@@ -1465,7 +1513,9 @@ private fun OrderSummaryDialog(state: PosUiState, viewModel: PosViewModel) {
                         "None" -> true
                         "PROMO_FREE_DRINK" -> state.promotionReservationToken != null && state.selectedDiscountLineId != null
                         else -> (!state.selectedDiscountRequiresReference || state.seniorPwdIdInput.isNotBlank()) &&
-                            (state.selectedDiscountScope == "order" || state.selectedDiscountLineId != null)
+                            (state.selectedDiscountScope == "order" ||
+                                (state.selectedDiscountScope == "multi" && state.selectedDiscountLineIds.isNotEmpty()) ||
+                                state.selectedDiscountLineId != null)
                     }
                     Button(
                         onClick = viewModel::confirmCheckout,
@@ -4788,13 +4838,6 @@ private fun RemoveCashDialog(state: PosUiState, viewModel: PosViewModel) {
                     value = state.cashRemovedInput,
                     onValueChange = viewModel::updateCashRemovedInput,
                     label = { Text("Amount (₱)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = state.cashRemovedReasonInput,
-                    onValueChange = viewModel::updateCashRemovedReasonInput,
-                    label = { Text("Reason (Optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

@@ -17,12 +17,14 @@ test('discount dashboard exposes accessible benefit and custom controls', () => 
   for (const marker of [
     'for="seniorPercent"', 'for="pwdPercent"', 'for="discountName"',
     'for="discountPercent"', 'for="discountScope"', 'role="status"',
-    'aria-live="polite"', '<dialog', 'Disable this discount?'
+    'aria-live="polite"', '<dialog', 'Disable this discount?',
+    'value="multi"', 'Multi selected items'
   ]) assert.match(html, new RegExp(marker.replace(/[?()]/g, '\\$&')));
   assert.match(html, /@media\(max-width:700px\)/);
   assert.match(html, /prefers-reduced-motion/);
   assert.match(script, /requestAnimationFrame\(\(\) => document\.getElementById\('discountName'\)\.focus/);
   assert.match(script, /Historical orders will not change/);
+  assert.match(script, /scopeLabel/);
   assert.doesNotMatch(script, /innerHTML\s*=\s*`/);
 });
 

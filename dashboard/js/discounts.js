@@ -43,6 +43,12 @@ function createMeta(label, value) {
   return container;
 }
 
+function scopeLabel(scope) {
+  if (scope === 'order') return 'Whole order';
+  if (scope === 'multi') return 'Multi selected items';
+  return 'One item';
+}
+
 function renderDiscounts() {
   discountList.replaceChildren();
   const rules = discountSettings?.customDiscounts || [];
@@ -66,7 +72,7 @@ function renderDiscounts() {
     name.append(title, status);
     const percent = createMeta('Discount', `${Number(rule.percent).toLocaleString('en-PH')}%`);
     percent.lastElementChild.className = 'discount-value';
-    const scope = createMeta('Applies to', rule.scope === 'order' ? 'Whole order' : 'One item');
+    const scope = createMeta('Applies to', scopeLabel(rule.scope));
     const reference = createMeta('Proof', rule.requiresReference ? 'ID/reference required' : 'Not required');
     const edit = document.createElement('button');
     edit.type = 'button';

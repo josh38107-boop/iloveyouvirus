@@ -60,6 +60,27 @@ class ItemDiscountCalculationTest {
     }
 
     @Test
+    fun multiItemDiscountIncludesAllSelectedLineTotals() {
+        val paidModifier = ModifierOption("oat", "milk", "Oat Milk", 2500)
+        val lines = listOf(
+            CartLine(id = "latte", item = menuItem("Latte", 15000), quantity = 2, modifiers = listOf(paidModifier)),
+            CartLine(id = "cookie", item = menuItem("Cookie", 5000), quantity = 3),
+            CartLine(id = "tea", item = menuItem("Tea", 12000))
+        )
+
+        assertEquals(10000, calculateMultiItemDiscountCents(lines, setOf("latte", "cookie"), 20.0))
+    }
+
+    @Test
+    fun multiItemDiscountRequiresSelectionAndValidPercent() {
+        val lines = listOf(CartLine(id = "latte", item = menuItem("Latte", 15000), quantity = 2))
+
+        assertEquals(0, calculateMultiItemDiscountCents(lines, emptySet(), 20.0))
+        assertEquals(0, calculateMultiItemDiscountCents(lines, setOf("missing"), 20.0))
+        assertEquals(0, calculateMultiItemDiscountCents(lines, setOf("latte"), 0.0))
+    }
+
+    @Test
     fun promotionDiscountsOneBaseDrinkButNotModifiers() {
         val paidModifier = ModifierOption("oat", "milk", "Oat Milk", 2500)
         val lines = listOf(

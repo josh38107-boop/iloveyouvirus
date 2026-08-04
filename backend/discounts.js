@@ -37,8 +37,8 @@ function validateRuleInput(input) {
     throw httpError(400, 'That discount name is reserved.');
   }
   const scope = String(input?.scope || '').toLowerCase();
-  if (!['item', 'order'].includes(scope)) {
-    throw httpError(400, 'Discount scope must be item or order.');
+  if (!['item', 'order', 'multi'].includes(scope)) {
+    throw httpError(400, 'Discount scope must be item, order, or multi.');
   }
   if (typeof input?.requiresReference !== 'boolean') {
     throw httpError(400, 'Reference requirement must be true or false.');

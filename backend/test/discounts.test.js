@@ -43,6 +43,13 @@ test('discount validation accepts supported benefit and custom values', () => {
     active: true,
     sortOrder: 2
   });
+  assert.equal(validateRuleInput({
+    name: 'Group Discount',
+    percent: 15,
+    scope: 'multi',
+    requiresReference: false,
+    active: true
+  }).scope, 'multi');
 });
 
 test('discount validation rejects invalid, reserved, and stale inputs', () => {
@@ -54,7 +61,7 @@ test('discount validation rejects invalid, reserved, and stale inputs', () => {
   }), /reserved/);
   assert.throws(() => validateRuleInput({
     name: 'Student', percent: 10, scope: 'basket', requiresReference: false, active: true
-  }), /item or order/);
+  }), /item, order, or multi/);
 });
 
 test('public discount rules use the admin API shape', () => {
@@ -82,6 +89,13 @@ test('discount migration is additive and preserves historical records', () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS discount_rule/);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS discount_reference/);
   assert.doesNotMatch(migration, /\bDROP\b|\bTRUNCATE\b|\bDELETE\b/i);
+});
+
+test('multi discount scope migration expands the existing scope check', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'migrations', '013_multi_discount_scope.sql'), 'utf8');
+  assert.match(migration, /DROP CONSTRAINT IF EXISTS discount_rule_scope_check/);
+  assert.match(migration, /'multi'/);
+  assert.doesNotMatch(migration, /\bTRUNCATE\b|\bDELETE\b/i);
 });
 
 test('benefit updates reject a stale website version and roll back', async () => {

@@ -30,6 +30,7 @@ import com.kape.coffeepos.data.PromotionClaim
 import com.kape.coffeepos.data.PromotionConfig
 import com.kape.coffeepos.data.PromotionResult
 import com.kape.coffeepos.data.businessDayWindow
+import com.kape.coffeepos.data.calculateMultiItemDiscountCents
 import com.kape.coffeepos.data.minutesUntilBusinessDayCutoff
 import com.kape.coffeepos.data.calculateSingleItemDiscountCents
 import com.kape.coffeepos.data.calculateWholeOrderDiscountCents
@@ -483,6 +484,7 @@ data class PosUiState(
     val selectedDiscountCategory: String = "None",
     val seniorPwdIdInput: String = "",
     val selectedDiscountLineId: String? = null,
+    val selectedDiscountLineIds: Set<String> = emptySet(),
     val discountRules: List<DiscountRule> = emptyList(),
     val settingsFormSeniorPercent: String = "20.0",
     val settingsFormPwdPercent: String = "20.0",
@@ -512,7 +514,6 @@ data class PosUiState(
     val cashAddedInput: String = "",
     val cashAddedReasonInput: String = "",
     val cashRemovedInput: String = "",
-    val cashRemovedReasonInput: String = "",
     val cashRemovePinInput: String = "",
     val cashRemovePinError: String? = null,
     val cashCountedInput: String = "",
@@ -801,6 +802,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                             selectedDiscountCategory = "None",
                             seniorPwdIdInput = "",
                             selectedDiscountLineId = null,
+                            selectedDiscountLineIds = emptySet(),
                             discountCents = 0
                         )
                     }
@@ -1548,10 +1550,12 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 }
             }
             val selectedLineId = state.selectedDiscountLineId?.takeIf { id -> next.any { it.id == id } }
-            val nextCents = recalculateSelectedItemDiscount(state, next, selectedLineId)
+            val selectedLineIds = state.selectedDiscountLineIds.filterTo(mutableSetOf()) { id -> next.any { it.id == id } }
+            val nextCents = recalculateSelectedItemDiscount(state, next, selectedLineId, selectedLineIds)
             state.copy(
                 cart = next,
                 selectedDiscountLineId = selectedLineId,
+                selectedDiscountLineIds = selectedLineIds,
                 discountCents = nextCents
             )
         }
@@ -1574,6 +1578,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     selectedDiscountCategory = "None",
                     seniorPwdIdInput = "",
                     selectedDiscountLineId = null,
+                    selectedDiscountLineIds = emptySet(),
                     promotionReservationToken = null,
                     promotionAppliedClaimCode = null,
                     promotionClaim = null,
@@ -1599,6 +1604,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                     selectedDiscountCategory = "None",
                     seniorPwdIdInput = "",
                     selectedDiscountLineId = null,
+                    selectedDiscountLineIds = emptySet(),
                     promotionReservationToken = null,
                     promotionAppliedClaimCode = null,
                     promotionClaim = null,
@@ -1623,6 +1629,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 selectedDiscountCategory = "None",
                 seniorPwdIdInput = "",
                 selectedDiscountLineId = null,
+                selectedDiscountLineIds = emptySet(),
                 heldCarts = updatedHeldCarts,
                 statusMessage = "Held order resumed."
             )
@@ -1730,19 +1737,22 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         state: PosUiState,
         cart: List<CartLine> = state.cart,
         selectedLineId: String? = state.selectedDiscountLineId,
+        selectedLineIds: Set<String> = state.selectedDiscountLineIds,
         category: String = state.selectedDiscountCategory
     ): Int {
         val rule = category.removePrefix("RULE:")
             .takeIf { category.startsWith("RULE:") }
             ?.let { id -> state.discountRules.firstOrNull { it.id == id && it.active } }
-        return if (rule?.scope == "order") {
-            calculateWholeOrderDiscountCents(cart, rule.percent)
-        } else {
-            calculateSingleItemDiscountCents(
-                lines = cart,
-                cartLineId = selectedLineId,
-                percent = benefitDiscountPercent(state, category)
-            )
+        return when (rule?.scope) {
+            "order" -> calculateWholeOrderDiscountCents(cart, rule.percent)
+            "multi" -> calculateMultiItemDiscountCents(cart, selectedLineIds, rule.percent)
+            else -> {
+                calculateSingleItemDiscountCents(
+                    lines = cart,
+                    cartLineId = selectedLineId,
+                    percent = benefitDiscountPercent(state, category)
+                )
+            }
         }
     }
 
@@ -1765,11 +1775,16 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         ) return null
         val percent = benefitDiscountPercent(state)
         val scope = customRule?.scope ?: "item"
-        val cents = if (scope == "order") {
-            calculateWholeOrderDiscountCents(state.cart, percent)
-        } else {
-            if (lineId == null) return null
-            calculateSingleItemDiscountCents(state.cart, lineId, percent)
+        val cents = when (scope) {
+            "order" -> calculateWholeOrderDiscountCents(state.cart, percent)
+            "multi" -> {
+                if (state.selectedDiscountLineIds.isEmpty()) return null
+                calculateMultiItemDiscountCents(state.cart, state.selectedDiscountLineIds, percent)
+            }
+            else -> {
+                if (lineId == null) return null
+                calculateSingleItemDiscountCents(state.cart, lineId, percent)
+            }
         }
         if (cents <= 0) return null
         return ItemDiscountSelection(
@@ -1779,7 +1794,8 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             discountCents = cents,
             ruleId = customRule?.id,
             scope = scope,
-            reference = state.seniorPwdIdInput.trim().ifBlank { null }
+            reference = state.seniorPwdIdInput.trim().ifBlank { null },
+            cartLineIds = if (scope == "multi") state.selectedDiscountLineIds else emptySet()
         )
     }
 
@@ -1798,6 +1814,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 selectedDiscountCategory = if (method == "Complimentary") "None" else state.selectedDiscountCategory,
                 seniorPwdIdInput = if (method == "Complimentary") "" else state.seniorPwdIdInput,
                 selectedDiscountLineId = if (method == "Complimentary") null else state.selectedDiscountLineId,
+                selectedDiscountLineIds = if (method == "Complimentary") emptySet() else state.selectedDiscountLineIds,
                 discountInput = if (method == "Complimentary") "0" else state.discountInput,
                 discountCents = if (method == "Complimentary") 0 else state.discountCents
             )
@@ -1902,6 +1919,10 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 state.selectedDiscountRequiresReference && state.seniorPwdIdInput.isBlank() ->
                     _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountName} ID or reference number.") }
                 state.selectedDiscountCategory != "None" &&
+                    state.selectedDiscountScope == "multi" &&
+                    state.selectedDiscountLineIds.isEmpty() ->
+                    _uiState.update { it.copy(paymentError = "Choose at least one item for the ${state.selectedDiscountName} discount.") }
+                state.selectedDiscountCategory != "None" &&
                     state.selectedDiscountScope == "item" &&
                     state.selectedDiscountLineId == null ->
                     _uiState.update { it.copy(paymentError = "Choose one item for the ${state.selectedDiscountName} discount.") }
@@ -1941,6 +1962,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                             selectedDiscountCategory = "None",
                             seniorPwdIdInput = "",
                             selectedDiscountLineId = null,
+                            selectedDiscountLineIds = emptySet(),
                             promotionReservationToken = null,
                             promotionAppliedClaimCode = null,
                             promotionClaim = null,
@@ -2354,6 +2376,10 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 state.selectedDiscountRequiresReference && state.seniorPwdIdInput.isBlank() ->
                     _uiState.update { it.copy(paymentError = "Enter the ${state.selectedDiscountName} ID or reference number.") }
                 state.selectedDiscountCategory != "None" &&
+                    state.selectedDiscountScope == "multi" &&
+                    state.selectedDiscountLineIds.isEmpty() ->
+                    _uiState.update { it.copy(paymentError = "Choose at least one item for the ${state.selectedDiscountName} discount.") }
+                state.selectedDiscountCategory != "None" &&
                     state.selectedDiscountScope == "item" &&
                     state.selectedDiscountLineId == null ->
                     _uiState.update { it.copy(paymentError = "Choose one item for the ${state.selectedDiscountName} discount.") }
@@ -2397,6 +2423,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                             selectedDiscountCategory = "None",
                             seniorPwdIdInput = "",
                             selectedDiscountLineId = null,
+                            selectedDiscountLineIds = emptySet(),
                             promotionReservationToken = null,
                             promotionAppliedClaimCode = null,
                             promotionClaim = null,
@@ -2459,10 +2486,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
         _uiState.update { it.copy(cashRemovedInput = value) }
     }
 
-    fun updateCashRemovedReasonInput(value: String) {
-        _uiState.update { it.copy(cashRemovedReasonInput = value) }
-    }
-
     fun updateCashRemovePinInput(value: String) {
         if (value.length <= 4 && value.all { it.isDigit() }) {
             _uiState.update { it.copy(cashRemovePinInput = value, cashRemovePinError = null) }
@@ -2482,7 +2505,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             it.copy(
                 showRemoveCashDialog = show,
                 cashRemovedInput = "",
-                cashRemovedReasonInput = "",
                 cashRemovePinInput = "",
                 cashRemovePinError = null
             )
@@ -2642,7 +2664,6 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 it.copy(
                     showRemoveCashDialog = false,
                     cashRemovedInput = "",
-                    cashRemovedReasonInput = "",
                     cashRemovePinInput = "",
                     cashRemovePinError = null,
                     statusMessage = String.format("Removed â‚±%,.2f from drawer.", amountCents / 100.0)
@@ -3207,20 +3228,30 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 ?.let { id -> state.discountRules.firstOrNull { it.id == id && it.active } }
             val resolvedPercent = customRule?.percent ?: cleanPct
             val validExistingLineId = state.selectedDiscountLineId?.takeIf { id -> state.cart.any { it.id == id } }
-            val selectedLineId = if (category == "None" || customRule?.scope == "order") {
-                null
-            } else {
-                validExistingLineId ?: if (state.cart.size == 1) state.cart.firstOrNull()?.id else null
+            val selectedLineId = when {
+                category == "None" || customRule?.scope == "order" || customRule?.scope == "multi" -> null
+                else -> validExistingLineId ?: if (state.cart.size == 1) state.cart.firstOrNull()?.id else null
             }
-            val discountCents = if (customRule?.scope == "order") {
-                calculateWholeOrderDiscountCents(state.cart, resolvedPercent)
-            } else {
-                calculateSingleItemDiscountCents(state.cart, selectedLineId, resolvedPercent)
+            val selectedLineIds = when {
+                customRule?.scope == "multi" -> {
+                    val validExistingLineIds = state.selectedDiscountLineIds
+                        .filterTo(mutableSetOf()) { id -> state.cart.any { it.id == id } }
+                    validExistingLineIds.ifEmpty {
+                        if (state.cart.size == 1) mutableSetOf(state.cart.first().id) else mutableSetOf()
+                    }
+                }
+                else -> emptySet()
+            }
+            val discountCents = when (customRule?.scope) {
+                "order" -> calculateWholeOrderDiscountCents(state.cart, resolvedPercent)
+                "multi" -> calculateMultiItemDiscountCents(state.cart, selectedLineIds, resolvedPercent)
+                else -> calculateSingleItemDiscountCents(state.cart, selectedLineId, resolvedPercent)
             }
             state.copy(
                 selectedDiscountCategory = category,
                 seniorPwdIdInput = if (category == "None") "" else state.seniorPwdIdInput,
                 selectedDiscountLineId = selectedLineId,
+                selectedDiscountLineIds = selectedLineIds,
                 discountType = "percent",
                 discountInput = resolvedPercent.toString(),
                 discountCents = discountCents,
@@ -3234,8 +3265,21 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
             if (state.selectedDiscountCategory == "None" || state.cart.none { it.id == lineId }) {
                 state
             } else {
+                if (state.selectedDiscountScope == "multi") {
+                    val selectedLineIds = if (lineId in state.selectedDiscountLineIds) {
+                        state.selectedDiscountLineIds - lineId
+                    } else {
+                        state.selectedDiscountLineIds + lineId
+                    }
+                    return@update state.copy(
+                        selectedDiscountLineIds = selectedLineIds,
+                        discountCents = recalculateSelectedItemDiscount(state, selectedLineIds = selectedLineIds),
+                        paymentError = null
+                    )
+                }
                 state.copy(
                     selectedDiscountLineId = lineId,
+                    selectedDiscountLineIds = emptySet(),
                     discountCents = recalculateSelectedItemDiscount(state, selectedLineId = lineId),
                     paymentError = null
                 )
@@ -4272,6 +4316,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                                 promotionAppliedClaimCode = reserved.claimCode,
                                 selectedDiscountCategory = "PROMO_FREE_DRINK",
                                 selectedDiscountLineId = lineId,
+                                selectedDiscountLineIds = emptySet(),
                                 seniorPwdIdInput = "",
                                 discountCents = line.item.basePriceCents,
                                 statusMessage = "Free drink claim applied. Modifiers remain chargeable."
@@ -4297,6 +4342,7 @@ class PosViewModel(private val container: AppContainer) : ViewModel() {
                 promotionClaim = null,
                 selectedDiscountCategory = "None",
                 selectedDiscountLineId = null,
+                selectedDiscountLineIds = emptySet(),
                 discountCents = 0,
                 statusMessage = "Promotion removed from this order."
             )
