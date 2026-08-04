@@ -55,7 +55,7 @@ const RESET_GUARDED_RPCS = new Set([
   'release_promotion_claim', 'finalize_promotion_claim', 'mark_promotion_printed'
 ]);
 
-const HIDEABLE_HAPPENING_ID_PATTERN = /^shift-(open|close)-\d+$/;
+const HIDEABLE_HAPPENING_ID_PATTERN = /^shift-(open|close)-([^|]+)\|(.+)$/;
 
 async function getBusinessDayCutoffMinutes() {
   const result = await db.query(`SELECT business_day_cutoff_minutes
@@ -574,6 +574,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
   try {
     const range = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
     const { days, fromMs, toMs } = range;
+    await ensureHiddenActivityHistoryTable();
     const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
@@ -582,6 +583,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM pos_order o
         WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
           AND ${nonComplimentaryOrderPredicate('o')}
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+          )
       `, [fromMs, toMs]),
       db.query(`
         WITH deduped_order_line AS (
@@ -616,6 +621,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
           JOIN pos_order o ON o.id = ol.order_id
           WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
             AND ${nonComplimentaryOrderPredicate('o')}
+            AND NOT EXISTS (
+              SELECT 1 FROM hidden_activity_history h
+              WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+            )
           GROUP BY ol.name
         ),
         item_payment_modes AS (
@@ -629,6 +638,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
           LEFT JOIN deduped_payment p ON p.order_id = o.id
           WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
             AND ${nonComplimentaryOrderPredicate('o')}
+            AND NOT EXISTS (
+              SELECT 1 FROM hidden_activity_history h
+              WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+            )
           GROUP BY ol.name
         )
         SELECT t.name, t.qty, t.revenue,
@@ -700,6 +713,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         LEFT JOIN order_payment_modes pm ON pm.order_id = o.id
         WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
           AND ${nonComplimentaryOrderPredicate('o')}
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+          )
         ORDER BY o.created_at DESC, o.id DESC
       `, [fromMs, toMs]),
       db.query(`
@@ -718,6 +735,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM deduped_payment p
         JOIN pos_order o ON o.id = p.order_id
         WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+          )
         GROUP BY method, payment_category
         ORDER BY method
       `, [fromMs, toMs]),
@@ -733,20 +754,28 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
             COALESCE(amount_tendered_cents, amount_cents), COALESCE(change_cents, 0), created_at,
             device_id, id
         )
-        SELECT s.device_id, s.id, s.starting_cash_cents, s.ending_cash_cents,
+        SELECT s.device_id, s.id, s.opened_at, s.starting_cash_cents, s.ending_cash_cents,
                s.cash_added_cents, s.cash_removed_cents,
                COALESCE(SUM(CASE
                  WHEN UPPER(COALESCE(p.payment_category, '')) = 'CASH'
                    OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) = 'cash')
                  THEN p.amount_cents ELSE 0 END), 0) as cash_sales
         FROM shift s
-        LEFT JOIN pos_order o ON o.shift_id = s.id
+        LEFT JOIN pos_order o ON o.shift_id::text = s.id::text
           AND o.shift_device_id = s.device_id
           AND o.status = 'paid'
           AND o.created_at >= $1 AND o.created_at < $2
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+          )
         LEFT JOIN deduped_payment p ON p.order_id = o.id
         WHERE s.opened_at >= $1 AND s.opened_at < $2
-        GROUP BY s.device_id, s.id, s.starting_cash_cents, s.ending_cash_cents,
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = s.device_id AND h.shift_id = s.id::text
+          )
+        GROUP BY s.device_id, s.id, s.opened_at, s.starting_cash_cents, s.ending_cash_cents,
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
         ORDER BY s.opened_at
       `, [fromMs, toMs]),
@@ -758,6 +787,10 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
         FROM pos_order o
         WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid' AND o.discount_cents > 0
           AND ${nonComplimentaryOrderPredicate('o')}
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+          )
         GROUP BY COALESCE(discount_category, 'Discount'), COALESCE(discount_scope, 'item')
         ORDER BY amount_cents DESC
       `, [fromMs, toMs])
@@ -776,18 +809,28 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       const removed = parseInt(shift.cash_removed_cents || 0);
       const shiftCashSales = parseInt(shift.cash_sales || 0);
       const hasCashSales = shiftCashSales > 0;
-      const displayedStarting = hasCashSales ? starting + added - removed : starting;
+      if (!hasCashSales) {
+        totals.latestNoCashStarting = starting;
+        return totals;
+      }
+      totals.hasCashSales = true;
+      const displayedStarting = starting + added - removed;
       const expected = displayedStarting + shiftCashSales;
       if (starting > 0 || hasCashSales) totals.hasActivity = true;
       totals.startingCash += displayedStarting;
       totals.expectedCashEnding += expected;
       totals.actualCashEnding += expected;
-      if (hasCashSales) {
-        totals.cashAdded += added;
-        totals.cashRemoved += removed;
-      }
+      totals.cashAdded += added;
+      totals.cashRemoved += removed;
       return totals;
-    }, { hasActivity: false, startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
+    }, { hasActivity: false, hasCashSales: false, latestNoCashStarting: 0, startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
+
+    if (!cashDrawer.hasCashSales && cashDrawer.latestNoCashStarting > 0) {
+      cashDrawer.hasActivity = true;
+      cashDrawer.startingCash = cashDrawer.latestNoCashStarting;
+      cashDrawer.expectedCashEnding = cashDrawer.latestNoCashStarting;
+      cashDrawer.actualCashEnding = cashDrawer.latestNoCashStarting;
+    }
 
     cashDrawer.onlinePayments = onlinePayments;
     cashDrawer.totalCashAndOnline = cashDrawer.expectedCashEnding + onlinePayments;
@@ -803,6 +846,8 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
       cashDrawer.totalCashAndOnline = 0;
       cashDrawer.cashSales = 0;
     }
+    delete cashDrawer.hasCashSales;
+    delete cashDrawer.latestNoCashStarting;
 
     res.json({
       days,
@@ -827,6 +872,7 @@ app.get('/admin/sales', adminAuthenticate, async (req, res) => {
   try {
     const range = await reportRange(req.query.days || 7, req.query.fromDate, req.query.toDate);
     const { fromMs, toMs, cutoffMinutes } = range;
+    await ensureHiddenActivityHistoryTable();
     const result = await db.query(`
       SELECT
         TO_CHAR(TO_TIMESTAMP((o.created_at - $3) / 1000) AT TIME ZONE 'Asia/Manila', 'YYYY-MM-DD') as date,
@@ -835,6 +881,10 @@ app.get('/admin/sales', adminAuthenticate, async (req, res) => {
       FROM pos_order o
       WHERE o.created_at >= $1 AND o.created_at < $2 AND o.status = 'paid'
         AND ${nonComplimentaryOrderPredicate('o')}
+        AND NOT EXISTS (
+          SELECT 1 FROM hidden_activity_history h
+          WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+        )
       GROUP BY date ORDER BY date
     `, [fromMs, toMs, cutoffMinutes * 60 * 1000]);
     res.json({ rows: result.rows, reportWindow: range });
@@ -1168,7 +1218,7 @@ async function handleGetHappenings(req, res) {
     let shiftRows = [];
     if (startMs !== null && endMs !== null) {
       const r = await db.query(
-        `SELECT id, opened_at, closed_at, employee_id, starting_cash_cents, ending_cash_cents
+        `SELECT device_id, id, opened_at, closed_at, employee_id, starting_cash_cents, ending_cash_cents
          FROM shift
          WHERE (opened_at >= $1 AND opened_at < $2) OR (closed_at IS NOT NULL AND closed_at >= $1 AND closed_at < $2)
          ORDER BY opened_at DESC LIMIT 100`,
@@ -1177,7 +1227,7 @@ async function handleGetHappenings(req, res) {
       shiftRows = r.rows || [];
     } else {
       const r = await db.query(
-        `SELECT id, opened_at, closed_at, employee_id, starting_cash_cents, ending_cash_cents
+        `SELECT device_id, id, opened_at, closed_at, employee_id, starting_cash_cents, ending_cash_cents
          FROM shift ORDER BY opened_at DESC LIMIT 100`
       ).catch(() => ({ rows: [] }));
       shiftRows = r.rows || [];
@@ -1205,9 +1255,11 @@ async function handleGetHappenings(req, res) {
 
     // --- shift rows
     shiftRows.forEach(row => {
+      const shiftDeviceId = String(row.device_id || '');
+      const shiftId = String(row.id || '');
       if (row.opened_at) {
         list.push({
-          id: 'shift-open-' + row.id,
+          id: `shift-open-${shiftDeviceId}|${shiftId}`,
           eventType: 'SHIFT_OPENED',
           category: 'Shifts',
           title: 'Shift Opened',
@@ -1219,7 +1271,7 @@ async function handleGetHappenings(req, res) {
       }
       if (row.closed_at) {
         list.push({
-          id: 'shift-close-' + row.id,
+          id: `shift-close-${shiftDeviceId}|${shiftId}`,
           eventType: 'SHIFT_CLOSED',
           category: 'Shifts',
           title: 'Shift Closed',
@@ -1248,25 +1300,39 @@ async function ensureHiddenActivityHistoryTable() {
     CREATE TABLE IF NOT EXISTS hidden_activity_history (
       event_id TEXT PRIMARY KEY,
       hidden_by TEXT NOT NULL DEFAULT 'admin',
-      hidden_at BIGINT NOT NULL
+      hidden_at BIGINT NOT NULL,
+      shift_device_id TEXT,
+      shift_id TEXT,
+      event_type TEXT
     )
   `);
+  await db.query('ALTER TABLE hidden_activity_history ADD COLUMN IF NOT EXISTS shift_device_id TEXT');
+  await db.query('ALTER TABLE hidden_activity_history ADD COLUMN IF NOT EXISTS shift_id TEXT');
+  await db.query('ALTER TABLE hidden_activity_history ADD COLUMN IF NOT EXISTS event_type TEXT');
 }
 
 app.get('/admin/happenings', adminAuthenticate, handleGetHappenings);
 app.delete('/admin/happenings/:id', adminAuthenticate, async (req, res) => {
   try {
     const eventId = String(req.params.id || '');
-    if (!HIDEABLE_HAPPENING_ID_PATTERN.test(eventId)) {
+    const match = eventId.match(HIDEABLE_HAPPENING_ID_PATTERN);
+    if (!match) {
       return res.status(400).json({ error: 'Only shift activity history entries can be deleted.' });
     }
+    const eventType = match[1] === 'open' ? 'SHIFT_OPENED' : 'SHIFT_CLOSED';
+    const shiftDeviceId = match[2];
+    const shiftId = match[3];
     await ensureHiddenActivityHistoryTable();
     await db.query(
-      `INSERT INTO hidden_activity_history(event_id, hidden_by, hidden_at)
-       VALUES ($1, $2, $3)
+      `INSERT INTO hidden_activity_history(event_id, hidden_by, hidden_at, shift_device_id, shift_id, event_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (event_id) DO UPDATE
-       SET hidden_by = EXCLUDED.hidden_by, hidden_at = EXCLUDED.hidden_at`,
-      [eventId, req.admin?.username || 'admin', Date.now()]
+       SET hidden_by = EXCLUDED.hidden_by,
+           hidden_at = EXCLUDED.hidden_at,
+           shift_device_id = EXCLUDED.shift_device_id,
+           shift_id = EXCLUDED.shift_id,
+           event_type = EXCLUDED.event_type`,
+      [eventId, req.admin?.username || 'admin', Date.now(), shiftDeviceId, shiftId, eventType]
     );
     res.status(204).end();
   } catch (err) {

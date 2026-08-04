@@ -183,7 +183,7 @@
   async function deleteHappening(id) {
     const target = allHappenings.find(h => h.id === id);
     if (!canDeleteHappening(target)) return;
-    if (!confirm(`Delete "${target.title}" from Activity History? This only hides the entry from Activity History. Sales, orders, and reports will remain.`)) return;
+    if (!confirm(`Delete "${target.title}" from Activity History? This hides the shift and excludes its orders, payments, Qty / Amount, and cash drawer data from Reports Excel.`)) return;
     try {
       await api.deleteHappening(id);
       allHappenings = allHappenings.filter(h => h.id !== id);
