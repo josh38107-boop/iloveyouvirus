@@ -51,11 +51,14 @@ test('website report cash drawer includes shifts hidden from Activity History', 
   assert.doesNotMatch(statsRoute, /hideOpenCash|hideCloseCash/);
   assert.doesNotMatch(statsRoute, /if \([^)]*hide[^)]*\) return totals;/);
   assert.match(statsRoute, /const starting = parseInt\(shift\.starting_cash_cents \|\| 0\)/);
+  assert.match(statsRoute, /const displayedStarting = starting \+ added - removed/);
+  assert.match(statsRoute, /totals\.startingCash \+= displayedStarting/);
   assert.match(statsRoute, /totals\.expectedCashEnding \+= expected/);
 });
 
 test('website report cash drawer balances actual ending to expected', () => {
   const statsRoute = server.match(/app\.get\('\/admin\/stats'[\s\S]*?\/\/ GET \/admin\/sales/)[0];
+  assert.match(statsRoute, /const expected = displayedStarting \+ shiftCashSales/);
   assert.match(statsRoute, /totals\.expectedCashEnding \+= expected/);
   assert.match(statsRoute, /totals\.actualCashEnding \+= expected/);
   assert.match(statsRoute, /cashDrawer\.difference = 0/);
