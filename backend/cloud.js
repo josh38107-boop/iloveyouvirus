@@ -30,12 +30,13 @@ const TABLES = {
   order_line: { role: 'counter', keys: ['device_id', 'id'], columns: ['device_id', 'id', 'order_id', 'item_id', 'name', 'quantity', 'unit_price_cents', 'modifiers', 'notes', 'discount_category', 'discount_cents'] },
   payment: { role: 'counter', keys: ['device_id', 'id'], columns: ['device_id', 'id', 'order_id', 'method', 'amount_cents', 'amount_tendered_cents', 'change_cents', 'created_at', 'payment_category'] },
   receipt: { role: 'counter', keys: ['order_id'], columns: ['order_id', 'receipt_number', 'text', 'created_at'] },
+  closed_shift_adjustment: { role: 'counter', keys: ['device_id', 'id'], columns: ['device_id', 'id', 'current_shift_device_id', 'current_shift_id', 'original_order_id', 'original_shift_device_id', 'original_shift_id', 'amount_cents', 'type', 'reason', 'staff_id', 'created_at'] },
   stock_snapshot: { role: 'counter', keys: ['device_id', 'shift_id', 'ingredient_id'], columns: ['device_id', 'shift_id', 'ingredient_id', 'quantity'] },
   order_inventory_add_on: { role: 'counter', keys: ['id'], columns: ['id', 'order_id', 'ingredient_id', 'quantity', 'created_at', 'restored_at', 'updated_at'] }
 };
 
 const CATALOG_TABLES = Object.entries(TABLES).filter(([, config]) => config.role === 'manager').map(([name]) => name);
-const OPERATION_TABLES = ['shift', 'pos_order', 'order_line', 'payment', 'receipt', 'stock_snapshot', 'order_inventory_add_on'];
+const OPERATION_TABLES = ['shift', 'pos_order', 'order_line', 'payment', 'receipt', 'closed_shift_adjustment', 'stock_snapshot', 'order_inventory_add_on'];
 const READ_TABLES = { ...TABLES, inventory_balance: { columns: ['branch_id', 'ingredient_id', 'quantity'] } };
 
 function now() { return Date.now(); }
