@@ -32,7 +32,7 @@ function computeCashDrawer({ shifts = [], closedShiftAdjustments = [], fallbackC
       return totals;
     }
     totals.hasCashSales = true;
-    const displayedStarting = starting + added - manualRemoved;
+    const displayedStarting = starting + added;
     const expected = displayedStarting + shiftCashSales - closedShiftVoidsRefunds;
     if (starting > 0 || hasCashSales) totals.hasActivity = true;
     totals.startingCash += displayedStarting;

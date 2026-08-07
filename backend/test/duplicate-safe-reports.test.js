@@ -86,7 +86,7 @@ test('website report cash drawer balances actual ending to expected', () => {
 
 test('website report cash drawer uses latest starting cash when there are no cash sales', () => {
   assert.match(drawerHelper, /totals\.hasCashSales = true/);
-  assert.match(drawerHelper, /const displayedStarting = starting \+ added - manualRemoved/);
+  assert.match(drawerHelper, /const displayedStarting = starting \+ added/);
   assert.match(drawerHelper, /latestNoCashStarting: 0/);
   assert.match(drawerHelper, /if \(!cashDrawer\.hasCashSales && cashDrawer\.latestNoCashStarting > 0\) \{/);
   assert.match(drawerHelper, /cashDrawer\.startingCash = cashDrawer\.latestNoCashStarting/);
@@ -141,12 +141,12 @@ test('website report moves closed shift refund amount back into starting cash', 
     cashSales: 103000,
     onlinePayments: 0
   });
-  assert.equal(drawer.startingCash, 73500);
+  assert.equal(drawer.startingCash, 83500);
   assert.equal(drawer.cashRemoved, 10000);
   assert.equal(drawer.closedShiftVoidsRefunds, 26000);
-  assert.equal(drawer.expectedCashEnding, 150500);
-  assert.equal(drawer.actualCashEnding, 150500);
-  assert.equal(drawer.totalCashAndOnline, 150500);
+  assert.equal(drawer.expectedCashEnding, 160500);
+  assert.equal(drawer.actualCashEnding, 160500);
+  assert.equal(drawer.totalCashAndOnline, 160500);
 });
 
 test('website report can split cash removed from void/refund fallback rows', () => {
@@ -163,10 +163,10 @@ test('website report can split cash removed from void/refund fallback rows', () 
     cashSales: 109000,
     onlinePayments: 0
   });
-  assert.equal(drawer.startingCash, 73500);
+  assert.equal(drawer.startingCash, 83500);
   assert.equal(drawer.cashRemoved, 10000);
   assert.equal(drawer.closedShiftVoidsRefunds, 26000);
-  assert.equal(drawer.expectedCashEnding, 156500);
+  assert.equal(drawer.expectedCashEnding, 166500);
 });
 
 test('closed shift adjustments are stored and synced for dashboard reports', () => {
