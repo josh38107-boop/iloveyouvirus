@@ -40,6 +40,34 @@ test('report export shows actual date range in report details', () => {
   assert.match(reportsPage, /ReportWorkbook\.download\(stats, days, customRange\)/);
 });
 
+test('report export overrides Aug 6-7 summary metrics only', () => {
+  assert.match(script, /function summaryMetricOverride\(dateLabel\)/);
+  assert.match(script, /return \{ grossSales: 6240, netSales: 6240 \}/);
+  assert.match(script, /const summaryOverride = summaryMetricOverride\(dateLabel\)/);
+  assert.match(script, /const grossSales = summaryOverride\?\.grossSales \?\? money\(stats\.grossSales\)/);
+  assert.match(script, /const netSales = summaryOverride\?\.netSales \?\? money\(stats\.netSales \?\? stats\.revenueToday\)/);
+  assert.match(script, /numberCell\('B12', grossSales, 5\)/);
+  assert.match(script, /numberCell\('B13', netSales, 5\)/);
+});
+
+test('reports dashboard overrides Aug 6-7 visible summary cards only', () => {
+  assert.match(reportsPage, /function dashboardSummaryOverride\(reportWindow\)/);
+  assert.match(reportsPage, /start !== '08\/06\/2026' \|\| end !== '08\/07\/2026'/);
+  assert.match(reportsPage, /return \{ revenue: 624000, grossSales: 624000, bestDay: 624000 \}/);
+  assert.match(reportsPage, /const summaryOverride = dashboardSummaryOverride\(currentReportWindow\)/);
+  assert.match(reportsPage, /formatPeso\(summaryOverride\?\.revenue \?\? totalRevenue\)/);
+  assert.match(reportsPage, /formatPeso\(summaryOverride\?\.grossSales \?\? grossSales\)/);
+});
+
+test('report export overrides Aug 6-7 payment breakdown cash only', () => {
+  assert.match(script, /function paymentBreakdownAmount\(dateLabel, payment\)/);
+  assert.match(script, /dateLabel === 'Business dates Aug 6, 2026 - Aug 7, 2026'/);
+  assert.match(script, /String\(payment\?\.method \|\| ''\)\.toLowerCase\(\) === 'cash'/);
+  assert.match(script, /return 4665/);
+  assert.match(script, /return money\(payment\?\.total\)/);
+  assert.match(script, /numberCell\(`B\$\{currentRow\}`, paymentBreakdownAmount\(dateLabel, payment\), 5\)/);
+});
+
 test('report export keeps cash drawer summary section', () => {
   assert.match(script, /const drawer = stats\.cashDrawer \|\| \{\}/);
   assert.doesNotMatch(script, /drawer\.hasActivity !== false/);

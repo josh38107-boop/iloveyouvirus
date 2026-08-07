@@ -11,6 +11,7 @@ const { createEmployeeService } = require('./employees');
 const { createDiscountService } = require('./discounts');
 const { createPaymentVoidService } = require('./payment-void');
 const { createDataMaintenanceService } = require('./data-maintenance');
+const { computeCashDrawer } = require('./report-cash-drawer');
 const {
   MANILA_TIME_ZONE,
   DEFAULT_BUSINESS_DAY_CUTOFF_MINUTES,
@@ -43,11 +44,11 @@ const ALLOWED_TABLES = new Set([
   'menu_item_modifier_group', 'ingredient', 'recipe_ingredient',
   'modifier_recipe_ingredient', 'payment_method', 'discount_rule', 'employee',
   'store_settings', 'shift', 'pos_order', 'order_line', 'payment',
-  'receipt', 'stock_snapshot', 'inventory_balance', 'order_inventory_add_on', 'audit_log'
+  'receipt', 'closed_shift_adjustment', 'stock_snapshot', 'inventory_balance', 'order_inventory_add_on', 'audit_log'
 ]);
 
 const RESET_GUARDED_TABLES = new Set([
-  'shift', 'pos_order', 'order_line', 'payment', 'receipt',
+  'shift', 'pos_order', 'order_line', 'payment', 'receipt', 'closed_shift_adjustment',
   'stock_snapshot', 'order_inventory_add_on', 'inventory_balance'
 ]);
 const RESET_GUARDED_RPCS = new Set([
@@ -480,6 +481,15 @@ function paymentCategory(row) {
   return '';
 }
 
+async function optionalReportQuery(label, sql, params = []) {
+  try {
+    return await db.query(sql, params);
+  } catch (err) {
+    console.warn(`Optional report query skipped (${label}):`, err.message);
+    return { rows: [], rowCount: 0 };
+  }
+}
+
 function nonComplimentaryOrderPredicate(orderAlias) {
   return `NOT EXISTS (
           SELECT 1 FROM payment complimentary_payment
@@ -575,7 +585,7 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
     const range = await reportRange(req.query.days, req.query.fromDate, req.query.toDate);
     const { days, fromMs, toMs } = range;
     await ensureHiddenActivityHistoryTable();
-    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, discountRes] = await Promise.all([
+    const [summaryRes, topItemsRes, orderSummaryRes, paymentRes, shiftsRes, closedShiftAdjustmentRes, closedShiftFallbackRes, discountRes] = await Promise.all([
       db.query(`
         SELECT COUNT(*) as count,
                COALESCE(SUM(subtotal_cents), 0) as gross,
@@ -779,6 +789,35 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
                  s.cash_added_cents, s.cash_removed_cents, s.opened_at
         ORDER BY s.opened_at
       `, [fromMs, toMs]),
+      optionalReportQuery('closed shift adjustments', `
+        SELECT a.current_shift_device_id, a.current_shift_id,
+               COALESCE(SUM(a.amount_cents), 0) AS amount_cents
+        FROM closed_shift_adjustment a
+        WHERE a.created_at >= $1 AND a.created_at < $2
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = a.current_shift_device_id AND h.shift_id = a.current_shift_id::text
+          )
+        GROUP BY a.current_shift_device_id, a.current_shift_id
+      `, [fromMs, toMs]),
+      optionalReportQuery('void/refund cash fallback', `
+        SELECT COALESCE(SUM(p.amount_cents), 0) AS amount_cents
+        FROM pos_order o
+        JOIN shift original_shift ON original_shift.device_id = o.shift_device_id
+          AND original_shift.id::text = o.shift_id::text
+        JOIN payment p ON p.order_id = o.id
+        WHERE o.created_at >= $1 AND o.created_at < $2
+          AND o.status IN ('void', 'refunded')
+          AND original_shift.closed_at IS NOT NULL
+          AND (
+            UPPER(COALESCE(p.payment_category, '')) = 'CASH'
+            OR (COALESCE(p.payment_category, '') = '' AND LOWER(p.method) = 'cash')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_activity_history h
+            WHERE h.shift_device_id = o.shift_device_id AND h.shift_id = o.shift_id::text
+          )
+      `, [fromMs, toMs]),
       db.query(`
         SELECT COALESCE(discount_category, 'Discount') AS name,
                COALESCE(discount_scope, 'item') AS scope,
@@ -803,51 +842,17 @@ app.get('/admin/stats', adminAuthenticate, async (req, res) => {
     const onlinePayments = payments
       .filter(row => paymentCategory(row) === 'ONLINE')
       .reduce((sum, row) => sum + parseInt(row.total || 0), 0);
-    const cashDrawer = shiftsRes.rows.reduce((totals, shift) => {
-      const starting = parseInt(shift.starting_cash_cents || 0);
-      const added = parseInt(shift.cash_added_cents || 0);
-      const removed = parseInt(shift.cash_removed_cents || 0);
-      const shiftCashSales = parseInt(shift.cash_sales || 0);
-      const hasCashSales = shiftCashSales > 0;
-      if (!hasCashSales) {
-        totals.latestNoCashStarting = starting;
-        return totals;
-      }
-      totals.hasCashSales = true;
-      const displayedStarting = starting + added - removed;
-      const expected = displayedStarting + shiftCashSales;
-      if (starting > 0 || hasCashSales) totals.hasActivity = true;
-      totals.startingCash += displayedStarting;
-      totals.expectedCashEnding += expected;
-      totals.actualCashEnding += expected;
-      totals.cashAdded += added;
-      totals.cashRemoved += removed;
-      return totals;
-    }, { hasActivity: false, hasCashSales: false, latestNoCashStarting: 0, startingCash: 0, expectedCashEnding: 0, actualCashEnding: 0, cashAdded: 0, cashRemoved: 0 });
-
-    if (!cashDrawer.hasCashSales && cashDrawer.latestNoCashStarting > 0) {
-      cashDrawer.hasActivity = true;
-      cashDrawer.startingCash = cashDrawer.latestNoCashStarting;
-      cashDrawer.expectedCashEnding = cashDrawer.latestNoCashStarting;
-      cashDrawer.actualCashEnding = cashDrawer.latestNoCashStarting;
-    }
-
-    cashDrawer.onlinePayments = onlinePayments;
-    cashDrawer.totalCashAndOnline = cashDrawer.expectedCashEnding + onlinePayments;
-    cashDrawer.difference = 0;
-    cashDrawer.cashSales = cashSales;
-    if (!cashDrawer.hasActivity) {
-      cashDrawer.startingCash = 0;
-      cashDrawer.expectedCashEnding = 0;
-      cashDrawer.actualCashEnding = 0;
-      cashDrawer.cashAdded = 0;
-      cashDrawer.cashRemoved = 0;
-      cashDrawer.onlinePayments = 0;
-      cashDrawer.totalCashAndOnline = 0;
-      cashDrawer.cashSales = 0;
-    }
-    delete cashDrawer.hasCashSales;
-    delete cashDrawer.latestNoCashStarting;
+    const cashDrawer = computeCashDrawer({
+      shifts: shiftsRes.rows,
+      closedShiftAdjustments: closedShiftAdjustmentRes.rows,
+      fallbackClosedShiftVoidsRefunds: Math.max(
+        parseInt(closedShiftFallbackRes.rows[0]?.amount_cents || 0) -
+          closedShiftAdjustmentRes.rows.reduce((sum, row) => sum + parseInt(row.amount_cents || 0), 0),
+        0
+      ),
+      cashSales,
+      onlinePayments
+    });
 
     res.json({
       days,
