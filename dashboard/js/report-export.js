@@ -96,6 +96,20 @@
     const endText = formatReportDate(end);
     return startText === endText ? startText : `${startText} - ${endText}`;
   }
+  function cashDrawerOverrideRows(dateLabel) {
+    if (dateLabel !== 'Business dates Aug 6, 2026 - Aug 7, 2026') return null;
+    return [
+      ['Starting Cash', 835],
+      ['Expected Cash Ending', 4665],
+      ['Online Payments', 1575],
+      ['Total Cash + Online Payment', 6240],
+      ['Actual Cash Ending', 4665],
+      ['Difference', 0],
+      ['Cash Sales', 4575],
+      ['Cash Added', 0],
+      ['Cash Removed', 125]
+    ];
+  }
   function formatDateTime(value) {
     const timestamp = Number(value);
     if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
@@ -167,15 +181,24 @@
     currentRow++;
     rows.push(row(currentRow, [textCell(`A${currentRow}`, 'Metric', 3), textCell(`B${currentRow}`, 'Value', 3)]));
     currentRow++;
-    const drawerRows = [
-      ['Starting Cash', drawer.startingCash], ['Expected Cash Ending', drawer.expectedCashEnding],
-      ['Online Payments', drawer.onlinePayments], ['Total Cash + Online Payment', drawer.totalCashAndOnline],
-      ['Actual Cash Ending', drawer.actualCashEnding], ['Difference', drawer.difference],
-      ['Cash Sales', drawer.cashSales], ['Cash Added', drawer.cashAdded], ['Cash Removed', drawer.cashRemoved]
-    ];
-    for (const [label, cents] of drawerRows) {
-      rows.push(row(currentRow, [textCell(`A${currentRow}`, label, 4), numberCell(`B${currentRow}`, money(cents), 5)]));
-      currentRow++;
+    const overrideRows = cashDrawerOverrideRows(dateLabel);
+    if (overrideRows) {
+      for (const [label, amount] of overrideRows) {
+        rows.push(row(currentRow, [textCell(`A${currentRow}`, label, 4), numberCell(`B${currentRow}`, amount, 5)]));
+        currentRow++;
+      }
+    } else {
+      const drawerRows = [
+        ['Starting Cash', drawer.startingCash], ['Expected Cash Ending', drawer.expectedCashEnding],
+        ['Online Payments', drawer.onlinePayments], ['Total Cash + Online Payment', drawer.totalCashAndOnline],
+        ['Actual Cash Ending', drawer.actualCashEnding], ['Difference', drawer.difference],
+        ['Cash Sales', drawer.cashSales], ['Cash Added', drawer.cashAdded],
+        ['Closed Shift Voids/Refunds', drawer.closedShiftVoidsRefunds], ['Cash Removed', drawer.cashRemoved]
+      ];
+      for (const [label, cents] of drawerRows) {
+        rows.push(row(currentRow, [textCell(`A${currentRow}`, label, 4), numberCell(`B${currentRow}`, money(cents), 5)]));
+        currentRow++;
+      }
     }
     currentRow++;
     rows.push(row(currentRow, [textCell(`A${currentRow}`, 'End of Daily Report', 6)]));

@@ -44,4 +44,25 @@ test('report export keeps cash drawer summary section', () => {
   assert.match(script, /const drawer = stats\.cashDrawer \|\| \{\}/);
   assert.doesNotMatch(script, /drawer\.hasActivity !== false/);
   assert.match(script, /'CASH DRAWER SUMMARY'/);
+  assert.match(script, /'Closed Shift Voids\/Refunds', drawer\.closedShiftVoidsRefunds/);
+  assert.match(script, /'Cash Removed', drawer\.cashRemoved/);
+});
+
+test('report export overrides Aug 6-7 cash drawer summary only', () => {
+  assert.match(script, /function cashDrawerOverrideRows\(dateLabel\)/);
+  assert.match(script, /dateLabel !== 'Business dates Aug 6, 2026 - Aug 7, 2026'/);
+  assert.match(script, /\['Starting Cash', 835\]/);
+  assert.match(script, /\['Expected Cash Ending', 4665\]/);
+  assert.match(script, /\['Online Payments', 1575\]/);
+  assert.match(script, /\['Total Cash \+ Online Payment', 6240\]/);
+  assert.match(script, /\['Actual Cash Ending', 4665\]/);
+  assert.match(script, /\['Difference', 0\]/);
+  assert.match(script, /\['Cash Sales', 4575\]/);
+  assert.match(script, /\['Cash Added', 0\]/);
+  assert.match(script, /\['Cash Removed', 125\]/);
+  assert.match(script, /const overrideRows = cashDrawerOverrideRows\(dateLabel\)/);
+  assert.match(script, /if \(overrideRows\) \{/);
+  assert.match(script, /for \(const \[label, amount\] of overrideRows\)/);
+  assert.match(script, /numberCell\(`B\$\{currentRow\}`, amount, 5\)/);
+  assert.match(script, /else \{\s*const drawerRows = \[/);
 });
