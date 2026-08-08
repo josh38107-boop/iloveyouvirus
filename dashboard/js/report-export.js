@@ -189,6 +189,30 @@
       currentRow++;
     }
 
+    currentRow++;
+    addSection(currentRow, 'TOP SELLING ITEMS');
+    currentRow++;
+    rows.push(row(currentRow, [textCell(`A${currentRow}`, 'Item Name', 3), textCell(`B${currentRow}`, 'Quantity Sold', 3), textCell(`C${currentRow}`, 'Revenue', 3)]));
+    currentRow++;
+    const topItems = Array.isArray(stats.topItems) ? [...stats.topItems] : [];
+    topItems.sort((a, b) => {
+      const qtyDiff = Number(b?.qty || 0) - Number(a?.qty || 0);
+      if (qtyDiff) return qtyDiff;
+      const revenueDiff = Number(b?.revenue || 0) - Number(a?.revenue || 0);
+      if (revenueDiff) return revenueDiff;
+      return String(a?.name || '').localeCompare(String(b?.name || ''));
+    });
+    if (topItems.length) {
+      for (const item of topItems) {
+        rows.push(row(currentRow, [textCell(`A${currentRow}`, item.name || '-', 4), numberCell(`B${currentRow}`, item.qty, 7), numberCell(`C${currentRow}`, money(item.revenue), 5)]));
+        currentRow++;
+      }
+    } else {
+      rows.push(row(currentRow, [textCell(`A${currentRow}`, 'No top selling items for this export period.', 4)]));
+      merges.push(`A${currentRow}:E${currentRow}`);
+      currentRow++;
+    }
+
     const drawer = stats.cashDrawer || {};
     currentRow++;
     addSection(currentRow, 'CASH DRAWER SUMMARY');

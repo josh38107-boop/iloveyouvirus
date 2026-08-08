@@ -12,9 +12,13 @@ test('report export JavaScript parses', () => {
   assert.doesNotThrow(() => new vm.Script(script));
 });
 
-test('report export uses order summary instead of top selling items', () => {
+test('report export shows top selling items below order summary', () => {
   assert.match(script, /'ORDER SUMMARY'/);
-  assert.doesNotMatch(script, /'TOP SELLING ITEMS'/);
+  assert.match(script, /'TOP SELLING ITEMS'/);
+  assert.match(script, /'Item Name'[\s\S]*'Quantity Sold'[\s\S]*'Revenue'/);
+  assert.match(script, /const topItems = Array\.isArray\(stats\.topItems\) \? \[\.\.\.stats\.topItems\] : \[\]/);
+  assert.match(script, /money\(item\.revenue\)/);
+  assert.match(script, /No top selling items for this export period\./);
   assert.doesNotMatch(script, /'Order ID'/);
   assert.doesNotMatch(script, /'Customer'/);
   assert.match(script, /'Date\/Time'[\s\S]*'Cashier'[\s\S]*'Payment Method'[\s\S]*'Items'[\s\S]*'Total'/);
